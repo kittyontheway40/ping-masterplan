@@ -9,8 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
 <!--CSS-->
-<link rel="stylesheet" href="assets/leaflet.css">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/leaflet.css?v=24">
+<link rel="stylesheet" href="assets/style.css?v=24">
 <!--/CSS-->
 </head>
 <body>
@@ -26,6 +26,7 @@
       <button class="btn ghost" id="authBtn">เข้าสู่ระบบผู้ดูแล</button>
       <button class="btn pink" id="newBtn">+ เสนอโครงการ</button>
     </div>
+    <span id="mode" class="mode ver"></span>
     <p class="proj">โครงการศึกษาจัดทำแผนแม่บทการบริหารจัดการทรัพยากรน้ำในเขตลุ่มน้ำปิง <span class="nw">ปรับปรุงช่วงที่ 1 (พ.ศ.&nbsp;2566-2580)</span></p>
   </div>
 </header>
@@ -46,15 +47,14 @@
     <span class="credit-l">จัดทำโดย</span>
     <img class="credit-logo" src="assets/chula-unisearch.png" alt="ศูนย์บริการวิชาการแห่งจุฬาลงกรณ์มหาวิทยาลัย (Chula Unisearch) จุฬาลงกรณ์มหาวิทยาลัย" width="900" height="120">
   </div>
-</div>
-<div class="wrap ver-row"><span id="mode" class="mode"></span></div></footer>
+</div></footer>
 <!--JS-->
-<script src="config.js"></script>
+<script src="config.js?v=24"></script>
 <!--/JS-->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <!--APP-->
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=24"></script>
 <!--/APP-->
 </body>
 </html>

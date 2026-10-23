@@ -286,7 +286,7 @@ function tamInfo(t, compact){
 
 /* ================= HEADER / KPIs / FILTERS ================= */
 function renderHeader(){
-  $('#mode').outerHTML = `<span id="mode" class="mode" title="${Store.mode==='firebase'?'เชื่อมต่อฐานข้อมูลออนไลน์':'ยังไม่ได้เชื่อมต่อฐานข้อมูลออนไลน์ ข้อมูลที่เพิ่มเก็บในเบราว์เซอร์นี้'}"><i class="mdot ${Store.mode==='firebase'?'on':''}"></i>${esc(CFG.version||'')}</span>`;
+  $('#mode').outerHTML = `<span id="mode" class="mode ver" title="${Store.mode==='firebase'?'เชื่อมต่อฐานข้อมูลออนไลน์':'ยังไม่ได้เชื่อมต่อฐานข้อมูลออนไลน์ ข้อมูลที่เพิ่มเก็บในเบราว์เซอร์นี้'}"><i class="mdot ${Store.mode==='firebase'?'on':''}"></i>${esc(CFG.version||'')}</span>`;
   const ss = Sess.get();
   $('#authBtn').innerHTML = S.admin ? 'ผู้ดูแลระบบ · ออกจากระบบ' : (ss?.role==='user' ? 'ผู้ใช้ทั่วไป · เข้าสู่ระบบผู้ดูแล' : 'เข้าสู่ระบบ');
   const t = $('.tab[data-tab="admin"]'); t.innerHTML = `ผู้ดูแลระบบ${S.admin && SUBS.length ? `<span class="badge-n">${SUBS.length}</span>`:''}`;
