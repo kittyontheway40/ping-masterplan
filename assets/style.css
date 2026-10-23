@@ -43,7 +43,7 @@ a{color:var(--blue)}
 .top{background:var(--navy);color:var(--on-navy)}
 .top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:14px}
 .brand{display:flex;gap:12px;align-items:center;min-width:0;flex:1 1 420px}
-.brand-logo{flex:none;height:62px;width:auto;background:#ffffff;border-radius:8px;padding:4px 8px;box-sizing:content-box}
+.brand-logo{flex:none;height:40px;width:auto;background:#ffffff;border-radius:6px;padding:3px 6px;box-sizing:content-box}
 .brand h1{font-size:1.2rem;font-weight:600}
 .brand h1 b{color:#f3a6c8;font-weight:700}
 .brand p{margin:0;font-size:.86rem;opacity:.88}
@@ -277,6 +277,6 @@ td.grp{min-width:130px}
 .keyf-panel > div:not(.keyf){border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:.86rem;white-space:pre-line;background:var(--surface)}
 .keyf-panel > div:not(.keyf) b{display:block;font-size:.82rem;color:var(--blue);margin-bottom:2px}
 
-@media (max-width:520px){.brand-logo{height:40px}}
+@media (max-width:520px){.brand-logo{height:30px}}
 .nw{white-space:nowrap}
 @media (max-width:720px){.br-d{display:none}}
