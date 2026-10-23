@@ -943,5 +943,19 @@ async function boot(){
   if(!ss) openWelcome();
   else if(ss.role==='admin' && Store.mode==='firebase'){ setTimeout(()=>{ if(!S.admin && !Store.auth.currentUser){ Sess.clear(); openWelcome('admin'); } }, 2500); }
 }
+/* ปรับขนาดชื่อระบบให้พอดีบรรทัดเดียวตามฟอนต์จริงที่โหลด */
+function fitTitle(){
+  const h = document.querySelector('.brand h1'); if(!h) return;
+  h.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(h).fontSize);
+  const max = 38; size = Math.min(max, size * (h.clientWidth / Math.max(1, h.scrollWidth)) * 1.15);
+  h.style.fontSize = size + 'px';
+  let guard = 40;
+  while(h.scrollWidth > h.clientWidth + 1 && guard-- > 0){ size -= 0.5; h.style.fontSize = size + 'px'; }
+}
+let fitT; window.addEventListener('resize', ()=>{ clearTimeout(fitT); fitT = setTimeout(fitTitle, 80); });
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
+window.addEventListener('load', fitTitle);
+setTimeout(fitTitle, 50);
 document.readyState==='loading' ? document.addEventListener('DOMContentLoaded', boot) : boot();
 })();
