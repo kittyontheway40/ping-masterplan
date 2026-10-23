@@ -47,8 +47,7 @@ a{color:var(--blue)}
 .proj{grid-area:proj;margin:0;font-size:.9rem;opacity:.9;min-width:0}
 .brand-row{display:flex;align-items:center;gap:14px;min-width:0}
 .brand-logo{flex:none;height:54px;width:auto;background:#ffffff;border-radius:6px;padding:3px 6px;box-sizing:content-box}
-.brand h1{font-size:clamp(1.05rem,2.6vw,2.1rem);font-weight:600;line-height:1.22;display:flex;flex-wrap:wrap;column-gap:.32em}
-.brand h1 span{white-space:nowrap}
+.brand h1{font-size:clamp(.8rem,calc((100vw - 210px) / 27),2.1rem);font-weight:600;line-height:1.22;white-space:nowrap;min-width:0}
 .brand h1 .t2{font-weight:600}
 .brand h1 b{color:#f3a6c8;font-weight:700}
 .brand p{margin:0;font-size:.86rem;opacity:.88}
@@ -247,7 +246,7 @@ details.basin-level .inner{padding:10px}
 .src{margin:0;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:640px){.foot-in{flex-wrap:wrap}.src{white-space:normal}.credit{margin-left:0}.credit-logo{height:18px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-@media (max-width:520px){.brand p{font-size:.74rem}.brand h1{font-size:1.05rem;flex-direction:column}}
+@media (max-width:520px){.brand p{font-size:.74rem}}
 
 
 #mapSide .dl{grid-template-columns:minmax(0,1fr);gap:2px}
@@ -300,6 +299,6 @@ td.grp{min-width:130px}
   .kpis{grid-template-columns:repeat(3,minmax(0,1fr));margin-block:10px}
   .kpi{padding:6px 8px}.kpi .v{font-size:1.15rem}.kpi .l{font-size:.68rem;line-height:1.3}
 }
-@media (min-width:900px){.brand h1{flex-wrap:nowrap;white-space:nowrap}}
 @media (max-width:899px){.top .wrap{grid-template-columns:minmax(0,1fr);grid-template-areas:'brand' 'proj' 'actions'}.top-actions{justify-self:start}}
 @media (max-width:520px){.proj{font-size:.74rem}}
+@media (max-width:620px){.brand-row{flex-direction:column;align-items:flex-start;gap:8px}.brand h1{font-size:calc((100vw - 44px) / 27.5)}}
