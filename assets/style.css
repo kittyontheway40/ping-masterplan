@@ -268,3 +268,11 @@ td.loc{min-width:92px;font-size:.84rem}
 td.grp{min-width:130px}
 .gcodes{font-size:.8rem;font-variant-numeric:tabular-nums;letter-spacing:.01em}
 .gcodes b{font-weight:600}
+
+.keyf-box{margin:14px 0 4px;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--bg)}
+.keyf-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.keyf-c b{color:var(--blue)}
+.keyf-c[aria-expanded="true"]{background:var(--blue-soft);border-color:var(--blue)}
+.keyf-panel{margin-top:10px}
+.keyf-panel > div:not(.keyf){border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:.86rem;white-space:pre-line;background:var(--surface)}
+.keyf-panel > div:not(.keyf) b{display:block;font-size:.82rem;color:var(--blue);margin-bottom:2px}

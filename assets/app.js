@@ -441,7 +441,10 @@ function renderBasin(){
     <div class="lbl" style="margin-top:14px">กลุ่มพื้นที่ในลุ่มน้ำนี้</div>${grpCounts(tg)}
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="mapbasin" data-v="${esc(b.name)}">ดูบนแผนที่</button><button class="btn sm pink" data-act="newproj" data-sb="${esc(b.name)}">+ เสนอโครงการในลุ่มน้ำนี้</button></div>
   </div>
-  ${Object.values(b.keyF||{}).some(Boolean)?`<div class="sec-h"><h3>แนวทางสำคัญรายแผนงาน (สรุปจากแผนแม่บท)</h3></div><div class="keyf">${Object.entries(b.keyF).filter(([k,v])=>v).map(([k,v])=>`<div><b>${k} ${esc(PROG[k]?.name||'')}</b>${esc(v)}</div>`).join('')}</div>`:''}
+  ${Object.values(b.keyF||{}).some(Boolean)?`<div class="keyf-box"><div class="keyf-h"><span class="lbl">แนวทางสำคัญรายแผนงาน (สรุปจากแผนแม่บท) · กดหรือชี้ที่แผนงานเพื่อดูรายละเอียด</span></div>
+    <div class="keyf-chips">${Object.entries(b.keyF).filter(([k,v])=>v).map(([k,v])=>`<button type="button" class="chip keyf-c" data-act="keyf" data-v="${k}" aria-expanded="false" title="${esc(k+' '+(PROG[k]?.name||'')+'\n'+v)}"><b>${k}</b> ${esc(PROG[k]?.name||'')}</button>`).join('')}<button type="button" class="linkbtn" data-act="keyfall">แสดงทั้งหมด</button></div>
+    <div class="keyf-panel" id="keyfPanel" hidden></div>
+    <template id="keyfData">${Object.entries(b.keyF).filter(([k,v])=>v).map(([k,v])=>`<div data-k="${k}"><b>${k} ${esc(PROG[k]?.name||'')}</b>${esc(v)}</div>`).join('')}</template></div>`:''}
   <div class="sec-h"><h3>${subLbl?'ตำบลใน'+esc(subLbl):'ตำบลในลุ่มน้ำ'} (${ts.length})</h3><span class="note">คลิกเพื่อดูข้อมูลตำบล</span></div>
   <div class="chips">${ts.sort((x,y)=>(y.target-x.target)||x.t.localeCompare(y.t,'th')).map(t=>`<button class="chip" data-act="gotamfull" data-v="${t.id}" title="${esc(tamName(t))}"><i style="background:${t.target?'var(--blue)':'var(--p0)'}"></i>ต.${esc(t.t)}</button>`).join('')}</div>
   <div class="sec-h"><h3>แนวทาง/โครงการ${subLbl?'ที่ลง'+esc(subLbl):'ในลุ่มน้ำ'} (${fmt(pj.length)})</h3>${subLbl?'<span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมายในพื้นที่นี้</span>':''}</div>
@@ -868,6 +871,14 @@ function bind(){
       case 'mapbasin': Object.assign(MS,{kind:'basin',basin:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='basin')); afterScope(); } break;
       case 'mapunsel': mapSel=null; MAP && MAP.closePopup(); L_T.setStyle(tamStyle); $('#mapSide').innerHTML='<div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่</div>'; mapProjects(); break;
       case 'mapgoproj': $('#mapProj')?.scrollIntoView({behavior:'smooth'}); break;
+      case 'keyf': { const pnl=$('#keyfPanel'); const open = a.getAttribute('aria-expanded')==='true';
+        $$('.keyf-c').forEach(c=>c.setAttribute('aria-expanded','false'));
+        if(open){ pnl.hidden=true; break; }
+        a.setAttribute('aria-expanded','true'); pnl.innerHTML = $('#keyfData').content.querySelector(`[data-k="${v}"]`).outerHTML; pnl.hidden=false; break; }
+      case 'keyfall': { const pnl=$('#keyfPanel'); const showing = pnl.dataset.all==='1' && !pnl.hidden;
+        $$('.keyf-c').forEach(c=>c.setAttribute('aria-expanded', showing?'false':'true'));
+        if(showing){ pnl.hidden=true; pnl.dataset.all=''; a.textContent='แสดงทั้งหมด'; break; }
+        pnl.innerHTML = `<div class="keyf">${$('#keyfData').innerHTML}</div>`; pnl.dataset.all='1'; pnl.hidden=false; a.textContent='ซ่อน'; break; }
       case 'mkind': if(MS.kind!==v){ MS.prov=''; MS.amp=''; MS.tam=''; mapSel=null; } MS.kind=v; $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===v)); afterScope(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }
