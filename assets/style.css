@@ -316,3 +316,4 @@ td.grp{min-width:130px}
 .nav-chip[aria-current="true"] .ct{color:#fff;background:rgba(255,255,255,.2)}
 .nav-chip .ct{font-size:.72rem;color:var(--muted);background:var(--surface-2);border-radius:99px;padding:0 6px;font-variant-numeric:tabular-nums}
 .navbox .legend{margin-top:6px}
+.nav-note{margin-top:6px;font-size:.76rem}

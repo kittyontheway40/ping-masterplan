@@ -403,7 +403,10 @@ function renderArea(){
     <div class="sec-h"><h3>โครงการในพื้นที่ (${fmt(pj.length)})</h3><span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมาย</span></div>
     ${projTable('area', pj, {name: lvl})}`;
   }
-  const nav = `<div class="navbox"><div class="navbox-h"><span class="lbl">${esc(head)} · กดเพื่อดูลึกลงไป · ตัวเลข = ${S.amp?'จำนวนโครงการ':'ตำบล · โครงการ'}</span>${S.prov?`<button class="linkbtn" data-act="up">ย้อนกลับ</button>`:''}</div><div class="nav-chips">${tree}</div>${S.amp?`<div class="legend"><span><i class="dot" style="background:var(--blue)"></i>พื้นที่เป้าหมาย</span><span><i class="dot" style="background:var(--p0)"></i>ไม่ใช่เป้าหมาย</span></div>`:''}</div>`;
+  const navTs = M.tambons.filter(t=>(!S.prov||t.p===S.prov)&&(!S.amp||t.a===S.amp));
+  const navSum = projIn(navTs).length;
+  const navNote = `<div class="note nav-note">โครงการเดียวอาจลงหลายพื้นที่ จึงถูกนับในทุกพื้นที่ที่ลง ผลรวมตัวเลขในปุ่มจึงอาจมากกว่ายอดรวม · ยอดรวมไม่นับซ้ำ <b class="num">${fmt(navSum)}</b> โครงการ</div>`;
+  const nav = `<div class="navbox"><div class="navbox-h"><span class="lbl">${esc(head)} · กดเพื่อดูลึกลงไป · ตัวเลข = ${S.amp?'จำนวนโครงการ':'ตำบล · โครงการ'}</span>${S.prov?`<button class="linkbtn" data-act="up">ย้อนกลับ</button>`:''}</div><div class="nav-chips">${tree}</div>${navNote}${S.amp?`<div class="legend"><span><i class="dot" style="background:var(--blue)"></i>พื้นที่เป้าหมาย</span><span><i class="dot" style="background:var(--p0)"></i>ไม่ใช่เป้าหมาย</span></div>`:''}</div>`;
   el.innerHTML = `<div class="crumbs">${crumbs}</div>${detail.replace('<!--NAV-->', nav)}`;
 }
 
