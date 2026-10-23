@@ -800,7 +800,7 @@ function openWelcome(start){
   const ss = Sess.get() || {};
   const fb = Store.mode==='firebase';
   const locked = !ss.role;
-  modal(`<div class="modal-h"><div><h2>เข้าใช้งานระบบ</h2><div class="note">ระบบติดตามแผนงานโครงการ แผนแม่บทลุ่มน้ำปิง</div></div>${locked?'':'<button class="x" data-act="close" aria-label="ปิด">×</button>'}</div>
+  modal(`<div class="modal-h"><div><h2>เข้าใช้งานระบบ</h2><div class="note">โครงการแผนแม่บทการบริหารจัดการทรัพยากรน้ำ ในเขตลุ่มน้ำปิง (พ.ศ. 2566–2580)</div></div>${locked?'':'<button class="x" data-act="close" aria-label="ปิด">×</button>'}</div>
   <div class="modal-b">
     <div class="role-pick" role="tablist">
       <button type="button" class="role-b" data-act="enteruser"><b>ผู้ใช้ทั่วไป</b><span>ดูข้อมูล ค้นหา และเสนอโครงการ กดเพื่อเข้าใช้งานได้ทันที</span></button>

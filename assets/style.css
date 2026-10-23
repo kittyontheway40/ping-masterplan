@@ -46,7 +46,7 @@ a{color:var(--blue)}
 .brand svg{flex:none}
 .brand h1{font-size:1.2rem;font-weight:600}
 .brand h1 b{color:#f3a6c8;font-weight:700}
-.brand p{margin:0;font-size:.82rem;opacity:.8}
+.brand p{margin:0;font-size:.86rem;opacity:.88}
 .top-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .mode{font-size:.75rem;padding:3px 10px;border-radius:99px;border:1px solid rgba(255,255,255,.35);letter-spacing:.02em}
 .mode{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
@@ -242,7 +242,7 @@ details.basin-level .inner{padding:10px}
 .src{margin:0;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:640px){.foot-in{flex-wrap:wrap}.src{white-space:normal}.credit{margin-left:0}.credit-logo{height:18px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-@media (max-width:520px){.brand p{display:none}.brand h1{font-size:1.05rem}}
+@media (max-width:520px){.brand p{font-size:.74rem}.brand h1{font-size:1.05rem}}
 
 #mapSide .dl{grid-template-columns:minmax(0,1fr);gap:2px}
 #mapSide .dl dt{margin-top:8px;font-size:.78rem}
