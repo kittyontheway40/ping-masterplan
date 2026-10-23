@@ -226,21 +226,43 @@ function projTable(key, list, opts={}){
   TABLES[key] = {list, n:PAGE, opts};
   return `<div data-table="${key}">${tableInner(key)}</div>`;
 }
+function projLoc(p){
+  const ts = (p.tambons||[]).map(id=>T[id]).filter(Boolean);
+  const uniq = a => [...new Set(a)];
+  return {ts, prov: uniq(ts.map(t=>t.p)), amp: uniq(ts.map(t=>t.a)), tam: ts.map(t=>t.t)};
+}
+function projGrpList(p){
+  const g = [...projGroups(p)];
+  if(g.length) return {codes: sortGrp(g), fromMeasure:false};
+  return {codes: sortGrp((MEAS[p.S]?.groups||'').match(/[WPREG]\d/g)||[]), fromMeasure:true};
+}
+function sortGrp(a){ return [...new Set(a)].sort((x,y)=>x[0]===y[0]? +x.slice(1)-+y.slice(1) : 'WPREG'.indexOf(x[0])-'WPREG'.indexOf(y[0])); }
+function shortList(arr, pre, max=2){
+  if(!arr.length) return '';
+  const shown = arr.slice(0,max).map(x=>pre+esc(x)).join(', ');
+  return arr.length>max ? `${shown} <span class="sub">+${arr.length-max}</span>` : shown;
+}
 function tableInner(key){
   const {list, n, opts} = TABLES[key];
   if(!list.length) return `<div class="empty">${opts.empty || 'ไม่มีโครงการ'}</div>`;
   const rows = list.slice(0, n).map(p=>{
-    const tams = (p.tambons||[]);
-    const tamTxt = tams.length ? (tams.length<=2 ? tams.map(id=>'ต.'+(T[id]?.t||id)).join(', ') : `ต.${T[tams[0]]?.t} และอีก ${tams.length-1} ตำบล`) : '<span class="sub">ระดับลุ่มน้ำ</span>';
+    const L = projLoc(p); const G = projGrpList(p);
+    const basinLvl = '<span class="sub">ระดับลุ่มน้ำ</span>';
+    const full = G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('\n');
+    const grp = G.codes.length ? `<span class="gcodes" title="${esc(full)}">${G.codes.slice(0,6).map(c=>`<b style="color:${SCOL['WPREG'.indexOf(c[0])+1]}">${c}</b>`).join(' ')}${G.codes.length>6?` <span class="sub">+${G.codes.length-6}</span>`:''}</span>`+(G.fromMeasure?'<div class="sub">ตามมาตรการ</div>':'') : '–';
     return `<tr class="row" data-pid="${esc(p.id)}">
       <td class="num sub">${esc(p.id)}</td>
       <td>${sPill(p.s)}</td>
       <td class="t">${esc(p.title)}${p.src==='new'?' <span class="pill new">เพิ่มใหม่</span>':''}${p.status?`<div class="sub">${esc(p.status)}</div>`:''}</td>
       <td><span class="pill code">${esc(p.F)}</span> <span class="pill code">${esc(p.S)}</span></td>
       ${opts.noBasin?'':`<td class="b">${esc(p.sb)}</td>`}
-      <td>${tamTxt}</td></tr>`;
+      <td class="loc">${L.ts.length?shortList(L.prov,'จ.'):basinLvl}</td>
+      <td class="loc">${L.ts.length?shortList(L.amp,'อ.'):''}</td>
+      <td class="loc">${L.ts.length?shortList(L.tam,'ต.'):''}</td>
+      <td class="grp">${grp}</td></tr>`;
   }).join('');
-  return `<div class="tbl-wrap"><table><thead><tr><th>รหัส</th><th>ยศ.</th><th>แนวทาง/โครงการ</th><th>แผนงาน/มาตรการ</th>${opts.noBasin?'':'<th>ลุ่มน้ำสาขา</th>'}<th>ตำบลเป้าหมาย</th></tr></thead><tbody>${rows}</tbody></table></div>
+  return `<div class="tbl-tools"><span class="note">${fmt(list.length)} รายการ</span><button class="btn sm" data-act="xls" data-key="${key}">ดาวน์โหลด Excel</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>รหัส</th><th>ยศ.</th><th>แนวทาง/โครงการ</th><th>แผนงาน/มาตรการ</th>${opts.noBasin?'':'<th>ลุ่มน้ำสาขา</th>'}<th>จังหวัด</th><th>อำเภอ</th><th>ตำบล</th><th>กลุ่มพื้นที่</th></tr></thead><tbody>${rows}</tbody></table></div>
   ${list.length>n?`<div class="more"><button class="btn sm" data-act="more" data-key="${key}">แสดงเพิ่ม (เหลืออีก ${fmt(list.length-n)} รายการ)</button></div>`:''}`;
 }
 function grpCounts(tams){
@@ -361,8 +383,8 @@ function renderArea(){
     detail = `<div class="info"><h2>ต.${esc(t.t)} <span class="note" style="font-size:.9rem">อ.${esc(t.a)} จ.${esc(t.p)}</span></h2>${tamInfo(t)}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="maptam" data-v="${t.id}">ดูบนแผนที่</button>${t.sb.map(b=>`<button class="btn sm" data-act="gobasin" data-v="${esc(b)}">ลุ่มน้ำสาขา${esc(b)}</button>`).join('')}</div></div>
       <div class="sec-h"><h3>โครงการที่มีตำบลนี้เป็นพื้นที่เป้าหมาย (${fmt(pj.length)})</h3><button class="btn sm pink" data-act="newproj" data-tam="${t.id}">+ เสนอโครงการในตำบลนี้</button></div>
-      ${projTable('tam', pj, {empty: t.target ? 'ยังไม่มีโครงการที่ระบุตำบลนี้เป็นพื้นที่เป้าหมาย' : 'ไม่มีโครงการ — ตำบลนี้ไม่ได้เป็นพื้นที่เป้าหมายของแผนแม่บท'})}
-      <details class="basin-level"><summary>แนวทางระดับลุ่มน้ำสาขาที่ตำบลนี้อยู่ (ไม่ระบุตำบลเป้าหมาย) · ${fmt(bl.length)} รายการ</summary><div class="inner">${projTable('tambl', bl)}</div></details>`;
+      ${projTable('tam', pj, {name:`ต.${t.t}_อ.${t.a}_จ.${t.p}`, empty: t.target ? 'ยังไม่มีโครงการที่ระบุตำบลนี้เป็นพื้นที่เป้าหมาย' : 'ไม่มีโครงการ — ตำบลนี้ไม่ได้เป็นพื้นที่เป้าหมายของแผนแม่บท'})}
+      <details class="basin-level"><summary>แนวทางระดับลุ่มน้ำสาขาที่ตำบลนี้อยู่ (ไม่ระบุตำบลเป้าหมาย) · ${fmt(bl.length)} รายการ</summary><div class="inner">${projTable('tambl', bl, {name:`ระดับลุ่มน้ำ_ต.${t.t}`})}</div></details>`;
   } else {
     const ts = M.tambons.filter(t=>(!S.prov||t.p===S.prov)&&(!S.amp||t.a===S.amp));
     const tg = ts.filter(t=>t.target); const pj = projIn(ts);
@@ -379,7 +401,7 @@ function renderArea(){
       <div class="lbl" style="margin-top:14px">กลุ่มพื้นที่ที่พบ</div>${grpCounts(tg)}
     </div>
     <div class="sec-h"><h3>โครงการในพื้นที่ (${fmt(pj.length)})</h3><span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมาย</span></div>
-    ${projTable('area', pj)}`;
+    ${projTable('area', pj, {name: lvl})}`;
   }
   el.innerHTML = `<div class="crumbs">${crumbs}</div><div class="split">
     <div class="panel"><div class="panel-h"><h3>${esc(head)}</h3>${S.prov?`<button class="btn sm" data-act="up">ย้อนกลับ</button>`:''}</div><div class="tree">${tree}</div>
@@ -423,7 +445,7 @@ function renderBasin(){
   <div class="sec-h"><h3>${subLbl?'ตำบลใน'+esc(subLbl):'ตำบลในลุ่มน้ำ'} (${ts.length})</h3><span class="note">คลิกเพื่อดูข้อมูลตำบล</span></div>
   <div class="chips">${ts.sort((x,y)=>(y.target-x.target)||x.t.localeCompare(y.t,'th')).map(t=>`<button class="chip" data-act="gotamfull" data-v="${t.id}" title="${esc(tamName(t))}"><i style="background:${t.target?'var(--blue)':'var(--p0)'}"></i>ต.${esc(t.t)}</button>`).join('')}</div>
   <div class="sec-h"><h3>แนวทาง/โครงการ${subLbl?'ที่ลง'+esc(subLbl):'ในลุ่มน้ำ'} (${fmt(pj.length)})</h3>${subLbl?'<span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมายในพื้นที่นี้</span>':''}</div>
-  ${projTable('basin', pj, {noBasin:true})}`;
+  ${projTable('basin', pj, {noBasin:true, name:'ลุ่มน้ำสาขา'+b.name+(subLbl?'_'+subLbl:'')})}`;
 }
 
 /* ================= VIEW: MAP ================= */
@@ -588,7 +610,7 @@ function mapProjects(){
     const where = MS.kind==='basin' && MS.basin ? 'ลุ่มน้ำสาขา'+esc(MS.basin)+(adm?' · '+adm:'') : (adm || 'ทั้ง 6 จังหวัดในลุ่มน้ำปิง');
     title = `โครงการใน${where}`;
   }
-  el.innerHTML = `<div class="sec-h"><h3>${title} (${fmt(list.length)})</h3><span class="note">${MF.active?'ตามตัวกรองด้านบน · ':''}${mapSel?'<button class="linkbtn" data-act="mapunsel">ดูโครงการทั้งพื้นที่ที่เลือก</button>':'คลิกตำบลบนแผนที่เพื่อดูเฉพาะตำบล'}</span></div>${projTable('map', list)}`;
+  el.innerHTML = `<div class="sec-h"><h3>${title} (${fmt(list.length)})</h3><span class="note">${MF.active?'ตามตัวกรองด้านบน · ':''}${mapSel?'<button class="linkbtn" data-act="mapunsel">ดูโครงการทั้งพื้นที่ที่เลือก</button>':'คลิกตำบลบนแผนที่เพื่อดูเฉพาะตำบล'}</span></div>${projTable('map', list, {name: title.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&')})}`;
 }
 function mapLegend(){
   let h='';
@@ -800,13 +822,24 @@ function openWelcome(start){
     }catch(err){ btn.disabled=false; $('#lg_err').textContent = /invalid|wrong|password|credential|ไม่ถูกต้อง/i.test((err.code||'')+err.message) ? 'รหัสผู้ดูแลไม่ถูกต้อง' : (err.message||'เข้าสู่ระบบไม่สำเร็จ'); $('#lg_pass').select(); }
   };
 }
-function exportXlsx(){
+function exportXlsx(list, name){
   if(!window.XLSX){ toast('ยังโหลดตัวส่งออกไม่เสร็จ ลองใหม่อีกครั้ง'); return; }
-  const rows = filt(P).map(p=>({'รหัส':p.id,'ลุ่มน้ำสาขา':p.sb,'ยุทธศาสตร์':p.s,'แผนงาน F':p.F,'มาตรการ S':p.S,'แนวทาง/โครงการ':p.title,'รายละเอียด':p.detail,
-    'ตำบลเป้าหมาย':(p.tambons||[]).map(id=>tamName(T[id])).join(', ')||'ไม่มีตำบลเป้าหมายตามยุทธศาสตร์นี้','กลุ่มพื้นที่':[...projGroups(p)].sort().join(', '),
-    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม':p.yearStart,'ปีสิ้นสุด':p.yearEnd,'สถานะ':p.status,'หมายเหตุ':p.note,'แหล่งที่มา':p.src==='new'?'เพิ่มใหม่':'แผนแม่บท','ตารางอ้างอิง':p.ref}));
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'โครงการ');
-  XLSX.writeFile(wb, 'ทะเบียนโครงการ_ลุ่มน้ำปิง.xlsx');
+  list = list || filt(P);
+  const rows = list.map(p=>{ const L = projLoc(p); const G = projGrpList(p); return {
+    'รหัส':p.id,'ยุทธศาสตร์':`${p.s} ${STRAT[p.s]?.short||''}`,'แผนงาน':`${p.F} ${PROG[p.F]?.name||''}`,'มาตรการ':`${p.S} ${MEAS[p.S]?.name||''}`,
+    'แนวทาง/โครงการ':p.title,'รายละเอียด':p.detail,'ลุ่มน้ำสาขา':p.sb,
+    'จังหวัด':L.prov.join(', '),'อำเภอ':L.amp.join(', '),'ตำบล':L.tam.join(', ')||'ไม่มีตำบลเป้าหมาย (ระดับลุ่มน้ำ)',
+    'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
+    'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
+    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':p.status,'หมายเหตุ':p.note,
+    'แหล่งที่มา':p.src==='new'?'เพิ่มใหม่':'แผนแม่บท','ตารางอ้างอิง':p.ref}; });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [8,22,30,40,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24,12,12].map(w=>({wch:w}));
+  ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:Object.keys(rows[0]||{a:1}).length-1}})};
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'โครงการ');
+  const fn = ('โครงการ_' + String(name||'ลุ่มน้ำปิง').replace(/^โครงการ(ที่ลง|ใน)?\s*/,'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,'_').slice(0,90);
+  XLSX.writeFile(wb, fn + '.xlsx');
+  toast(`ดาวน์โหลด ${fmt(rows.length)} รายการแล้ว`);
 }
 
 /* ================= ROUTING & EVENTS ================= */
@@ -857,6 +890,7 @@ function bind(){
       case 'rejectok': { const s=sub(); try{ await Store.reject(s, $('#rr_'+CSS.escape(s._id)).value.trim()); toast('บันทึกว่าไม่อนุมัติแล้ว'); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
       case 'seed': { a.disabled=true; try{ await Store.seed((n,t)=>{ const el=$('#seedProg'); if(el) el.textContent=`นำเข้าแล้ว ${n}/${t}`; }); toast('นำเข้าข้อมูลตั้งต้นแล้ว'); }catch(err){ a.disabled=false; toast('นำเข้าไม่สำเร็จ: '+err.message); } break; }
       case 'export': exportXlsx(); break;
+      case 'xls': { const T0=TABLES[a.dataset.key]; exportXlsx(T0.list, T0.opts.name); break; }
       case 'demoreset': $('#resetBox').innerHTML = `<div class="confirm-box" style="margin-top:8px"><span>ล้างโครงการที่เพิ่ม/แก้ไขในโหมดทดลองทั้งหมด?</span><button class="btn sm danger" data-act="demoresetok">ยืนยัน</button><button class="btn sm" data-act="demoresetno">ยกเลิก</button></div>`; break;
       case 'demoresetno': $('#resetBox').innerHTML=''; break;
       case 'demoresetok': ['ping_overrides','ping_subs','ping_audit'].forEach(k=>{ try{localStorage.removeItem(k);}catch(e){} }); Store.initDemo(); toast('ล้างข้อมูลทดลองแล้ว'); break;
