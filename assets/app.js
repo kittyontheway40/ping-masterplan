@@ -835,9 +835,9 @@ function exportXlsx(list, name){
     'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
     'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
     'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':p.status,'หมายเหตุ':p.note,
-    'แหล่งที่มา':p.src==='new'?'เพิ่มใหม่':'แผนแม่บท','ตารางอ้างอิง':p.ref}; });
+    }; });
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [8,22,30,40,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24,12,12].map(w=>({wch:w}));
+  ws['!cols'] = [8,22,30,40,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24].map(w=>({wch:w}));
   ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:Object.keys(rows[0]||{a:1}).length-1}})};
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'โครงการ');
   const fn = ('โครงการ_' + String(name||'ลุ่มน้ำปิง').replace(/^โครงการ(ที่ลง|ใน)?\s*/,'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,'_').slice(0,90);

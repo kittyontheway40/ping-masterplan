@@ -2,7 +2,7 @@
 // ถ้ายังไม่ใส่ค่า Firebase (apiKey ว่าง) ข้อมูลที่เพิ่ม/แก้จะเก็บในเบราว์เซอร์เครื่องนั้นเท่านั้น
 window.APP_CONFIG = {
   // เลขเวอร์ชันแสดงมุมขวาบน: v<รุ่น> · <วัน.เดือน.ปี พ.ศ. ที่อัปเดต>
-  version: "v2.2 · 24.10.2569",
+  version: "v2.3 · 24.10.2569",
   firebase: {
     apiKey: "AIzaSyCr7JAjfQB4DTMtL0a9gSejcLCXaO1qfRk",
     authDomain: "ping-masterplan.firebaseapp.com",
