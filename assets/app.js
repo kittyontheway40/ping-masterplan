@@ -258,7 +258,6 @@ function tamInfo(t, compact){
     <dt>กลุ่มพื้นที่</dt><dd>${grps}</dd>
     ${compact?'':`<dt>แผนงานที่ควรใช้ (เสนอ)</dt><dd>${t.F.length ? t.F.map(f=>`<span class="pill code">${f}</span> ${esc(PROG[f]?.name||'')}`).join('<br>') : '–'}</dd>`}
     <dt>ลุ่มน้ำสาขา</dt><dd>${sbs||'–'}</dd>
-    <dt>ตามพระราชกฤษฎีกาฯ</dt><dd>${esc(t.cov)}</dd>
     <dt>พื้นที่ตำบล</dt><dd class="num">${t.area!=null? fmt(t.area)+' ตร.กม.':'–'}</dd>
   </dl>`;
 }
@@ -495,7 +494,8 @@ function bindScope(){
 }
 function afterScope(){
   $('#mScope').innerHTML = scopeTools(); bindScope();
-  mapBoundaryLayers(); L_T.setStyle(tamStyle); mapLabels(); fitScope(); mapLegend();
+  if(MS.kind!=='admin' || !MS.tam){ if(mapSel && !inScope(T[mapSel])) mapSel=null; }
+  mapBoundaryLayers(); L_T.setStyle(tamStyle); mapLabels(); fitScope(); mapLegend(); mapProjects();
   if(MS.kind==='admin' && MS.tam){ const l=L_T.getLayers().find(x=>x.feature.properties.id===MS.tam); if(l) MAP.fitBounds(l.getBounds(), {maxZoom:11, padding:[30,30]}); mapPick(MS.tam, true); }
 }
 async function renderMap(){
@@ -513,16 +513,17 @@ async function renderMap(){
         <div class="fld" id="mStratWrap" hidden><label for="mStrat">ยุทธศาสตร์</label><select id="mStrat">${M.strategies.map(s=>`<option value="${s.n}" ${s.n==3?'selected':''}>${s.n} ${esc(s.short)}</option>`).join('')}</select></div>
         <div class="fld"><label for="mOp">ความเข้มสีตำบล</label><input id="mOp" type="range" min="0" max="90" value="${Math.round(mapOp*100)}"></div>
         <label class="chip"><input type="checkbox" id="mHS" checked> ภูมิประเทศ (DEM)</label>
-        ${CFG.basemap?'<label class="chip"><input type="checkbox" id="mBase" checked> แผนที่ฐาน</label>':''}
+        ${CFG.basemap?`<div class="fld"><label for="mBase">แผนที่ฐาน</label><select id="mBase"><option value="gray">แผนที่สีเทา</option><option value="osm">OpenStreetMap</option><option value="sat">ภาพถ่ายดาวเทียม</option><option value="none">ไม่แสดง</option></select></div>`:''}
       </div>
       <div class="mapbox"><div style="min-width:0">
       <div id="map" role="region" aria-label="แผนที่ลุ่มน้ำปิง"></div>
       <div class="map-legend" id="mLegend"></div></div>
-      <div id="mapSide" class="panel" style="min-width:0"><div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่และโครงการ</div></div></div>`;
+      <div id="mapSide" class="panel" style="min-width:0"><div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่</div></div></div>
+      <div id="mapProj"></div>`;
     $('#mScope').innerHTML = scopeTools();
     await loadGeo();
     MAP = L.map('map', {zoomSnap:.25, preferCanvas:true}).setView([17.6,99.1], 7.5);
-    if(CFG.basemap){ L_BASE = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {attribution:'© OpenStreetMap, © CARTO', maxZoom:16}).addTo(MAP); }
+    if(CFG.basemap){ setBase('gray'); }
     L_HS = L.imageOverlay(DATA+'hillshade.webp', GEO.hb, {opacity:1}).addTo(MAP);
     L_T = L.geoJSON(GEO.t, {style:tamStyle, onEachFeature:(f,l)=>{ const t=T[f.properties.id]; l.bindTooltip(t?`ต.${t.t} อ.${t.a}`:'', {sticky:true}); l.on('click',e=>mapPick(f.properties.id, true, false, e.latlng)); }}).addTo(MAP);
     L_PV = L.geoJSON(GEO.pv, {interactive:false});
@@ -533,15 +534,39 @@ async function renderMap(){
     $('#mStrat').onchange = e=>{ mapStrat=e.target.value; L_T.setStyle(tamStyle); mapLegend(); };
     $('#mOp').oninput = e=>{ mapOp = e.target.value/100; L_T.setStyle(tamStyle); };
     $('#mHS').onchange = e=> e.target.checked ? L_HS.addTo(MAP) : L_HS.remove();
-    if($('#mBase')) $('#mBase').onchange = e=> e.target.checked ? L_BASE.addTo(MAP) : L_BASE.remove();
+    if($('#mBase')) $('#mBase').onchange = e=> setBase(e.target.value);
     MAP.on('zoomend', labelZoom);
     afterScope();
     if(mapSel && !MS.tam) mapPick(mapSel, false);
   } else {
-    L_T.setStyle(tamStyle); mapLegend();
+    L_T.setStyle(tamStyle); mapLegend(); mapProjects();
     if(MF.active) fitScope();
     setTimeout(()=>MAP.invalidateSize(),50);
   }
+}
+const BASES = {
+  gray:['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}','แผนที่ฐาน © Esri',16],
+  osm:['https://tile.openstreetmap.org/{z}/{x}/{y}.png','© OpenStreetMap contributors',19],
+  sat:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}','ภาพถ่ายดาวเทียม © Esri, Maxar, Earthstar Geographics',18]
+};
+function setBase(k){
+  if(L_BASE){ L_BASE.remove(); L_BASE=null; }
+  const b = BASES[k]; if(!b) return;
+  L_BASE = L.tileLayer(b[0], {attribution:b[1], maxZoom:b[2]}).addTo(MAP); L_BASE.bringToBack();
+}
+function mapProjects(){
+  const el = $('#mapProj'); if(!el) return;
+  let list, title;
+  if(mapSel && T[mapSel]){
+    const t = T[mapSel]; list = filt(IDX.byTam[mapSel]||[]);
+    title = `โครงการที่ลง ต.${esc(t.t)} อ.${esc(t.a)} จ.${esc(t.p)}`;
+  } else {
+    const ids = new Set(M.tambons.filter(t=>inScope(t)).map(t=>t.id));
+    list = filt(P).filter(p=>(p.tambons||[]).some(id=>ids.has(id)) || (MS.kind==='basin' && MS.basin && p.sb===MS.basin && !(p.tambons||[]).length));
+    const where = MS.kind==='basin' ? (MS.basin ? 'ลุ่มน้ำสาขา'+esc(MS.basin) : 'ลุ่มน้ำปิงทั้งหมด') : (MS.tam ? 'ต.'+esc(T[MS.tam].t) : MS.amp ? 'อ.'+esc(MS.amp)+' จ.'+esc(MS.prov) : MS.prov ? 'จ.'+esc(MS.prov) : 'ลุ่มน้ำปิงทั้งหมด');
+    title = `โครงการใน${where}`;
+  }
+  el.innerHTML = `<div class="sec-h"><h3>${title} (${fmt(list.length)})</h3><span class="note">${MF.active?'ตามตัวกรองด้านบน · ':''}${mapSel?'<button class="linkbtn" data-act="mapunsel">ดูโครงการทั้งพื้นที่ที่เลือก</button>':'คลิกตำบลบนแผนที่เพื่อดูเฉพาะตำบล'}</span></div>${projTable('map', list)}`;
 }
 function mapLegend(){
   let h='';
@@ -575,9 +600,9 @@ function mapPick(id, noZoom, noPopup, latlng){
   if(lyr && !noZoom && !MAP.getBounds().contains(lyr.getBounds())) MAP.fitBounds(lyr.getBounds(), {maxZoom:11});
   if(lyr){ L.popup({maxWidth:280, autoPanPadding:[20,20]}).setLatLng(latlng || lyr.getBounds().getCenter()).setContent(tamPopup(t)).openOn(MAP); }
   $('#mapSide').innerHTML = `<div class="panel-h"><h3>ต.${esc(t.t)} อ.${esc(t.a)} จ.${esc(t.p)}</h3></div><div style="padding:4px 14px 14px">${tamInfo(t, true)}
-    <div class="lbl" style="margin-top:10px">โครงการที่ลงตำบลนี้${MF.proj?' (ตามตัวกรอง)':''} ${fmt(pj.length)} รายการ</div>
-    <div class="stack" style="margin-top:6px;gap:4px">${pj.slice(0,8).map(p=>`<button class="tree-item" style="border:1px solid var(--line);border-radius:6px" data-pid="${p.id}">${sPill(p.s)}<span class="nm" style="white-space:normal">${esc(p.title)}</span></button>`).join('') || '<div class="note">ไม่มีโครงการ</div>'}${pj.length>8?`<div class="note">และอีก ${pj.length-8} รายการ</div>`:''}</div>
+    <div class="lbl" style="margin-top:10px">โครงการ</div><div><b class="num">${fmt(pj.length)}</b> รายการ${MF.proj?' (ตามตัวกรอง)':''} · <button class="linkbtn" data-act="mapgoproj">ดูรายการใต้แผนที่</button></div>
     <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm primary" data-act="gotamfull" data-v="${id}">เปิดหน้าตำบล</button><button class="btn sm" data-act="newproj" data-tam="${id}">+ เสนอโครงการ</button></div></div>`;
+  mapProjects();
 }
 
 /* ================= VIEW: ADMIN ================= */
@@ -786,6 +811,8 @@ function bind(){
       case 'gobasin': S.basin=v||null; closeModal(); setTab('basin'); window.scrollTo({top:0}); break;
       case 'maptam': { const t=T[v]; mapSel=v; Object.assign(MS,{kind:'admin',prov:t.p,amp:t.a,tam:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='admin')); afterScope(); } break; }
       case 'mapbasin': Object.assign(MS,{kind:'basin',basin:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='basin')); afterScope(); } break;
+      case 'mapunsel': mapSel=null; MAP && MAP.closePopup(); L_T.setStyle(tamStyle); $('#mapSide').innerHTML='<div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่</div>'; mapProjects(); break;
+      case 'mapgoproj': $('#mapProj')?.scrollIntoView({behavior:'smooth'}); break;
       case 'mkind': MS.kind=v; $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===v)); afterScope(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }
