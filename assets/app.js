@@ -163,10 +163,11 @@ const Store = {
   async seed(onProgress){
     if(this.mode!=='firebase') return;
     const all = SEED.map(normProj);
-    for(let i=0;i<all.length;i+=400){
+    const N = 15; // กฎความปลอดภัยตรวจสิทธิ์ทุกเอกสาร จึงส่งทีละชุดเล็ก
+    for(let i=0;i<all.length;i+=N){
       const b = this.db.batch();
-      all.slice(i,i+400).forEach(p=>b.set(this.db.doc('projects/'+p.id), p));
-      await b.commit(); onProgress && onProgress(Math.min(i+400, all.length), all.length);
+      all.slice(i,i+N).forEach(p=>b.set(this.db.doc('projects/'+p.id), p));
+      await b.commit(); onProgress && onProgress(Math.min(i+N, all.length), all.length);
     }
     await this.db.collection('audit').add({ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'นำเข้าข้อมูลตั้งต้น', id:'-', detail:all.length+' โครงการ'});
   }
