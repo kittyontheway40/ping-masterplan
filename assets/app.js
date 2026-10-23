@@ -45,7 +45,7 @@ const Store = {
   db:null, auth:null, unsub:[],
   async init(){
     if(this.mode === 'firebase'){
-      try{ await this.loadFirebase(); }catch(e){ console.error(e); this.mode='demo'; toast('เชื่อมต่อฐานข้อมูลออนไลน์ไม่ได้ ระบบเปิดในโหมดทดลอง'); }
+      try{ await this.loadFirebase(); }catch(e){ console.error(e); this.mode='demo'; toast('เชื่อมต่อฐานข้อมูลออนไลน์ไม่ได้ ข้อมูลที่เพิ่มจะเก็บในเครื่องนี้ชั่วคราว'); }
     }
     if(this.mode === 'firebase') this.initFirebase(); else this.initDemo();
   },
@@ -282,14 +282,39 @@ function renderFilters(){
   const f = S.f;
   const Fopts = M.programmes.filter(p=>!f.s.size || f.s.has(p.s));
   const Sopts = M.measures.filter(m=>(!f.s.size || f.s.has(m.s)) && (!f.F || m.F.includes(f.F)));
-  $('#filters').innerHTML = `
+  let loc = '';
+  if(S.tab==='area'){
+    const amps = S.prov ? [...new Set(M.tambons.filter(t=>t.p===S.prov).map(t=>t.a))].sort((a,b)=>a.localeCompare(b,'th')) : [];
+    const tams = S.amp ? M.tambons.filter(t=>t.p===S.prov&&t.a===S.amp).sort((a,b)=>a.t.localeCompare(b.t,'th')) : [];
+    loc = `<div class="locrow">
+      <div class="fld"><label for="fLp">จังหวัด</label><select id="fLp"><option value="">ทั้ง 6 จังหวัด</option>${M.provinces.map(p=>`<option ${S.prov===p?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+      <div class="fld"><label for="fLa">อำเภอ</label><select id="fLa" ${S.prov?'':'disabled'}><option value="">${S.prov?'ทุกอำเภอ':'เลือกจังหวัดก่อน'}</option>${amps.map(a=>`<option ${S.amp===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+      <div class="fld"><label for="fLt">ตำบล</label><select id="fLt" ${S.amp?'':'disabled'}><option value="">${S.amp?'ทุกตำบล':'เลือกอำเภอก่อน'}</option>${tams.map(t=>`<option value="${t.id}" ${S.tam===t.id?'selected':''}>${esc(t.t)}${t.target?' (เป้าหมาย)':''}</option>`).join('')}</select></div>
+    </div>`;
+  } else if(S.tab==='basin'){
+    loc = `<div class="locrow"><div class="fld"><label for="fLb">ลุ่มน้ำสาขา</label><select id="fLb"><option value="">ทั้ง 30 ลุ่มน้ำสาขา</option>${M.basins.map(b=>`<option ${S.basin===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div></div>`;
+  }
+  $('#filters').innerHTML = loc + `
     <div class="fld search"><label for="fq">ค้นหา</label><input id="fq" type="search" placeholder="ชื่อโครงการ ตำบล อำเภอ ลุ่มน้ำ หรือรหัส" value="${esc(f.q)}"></div>
     <div class="fld"><span class="lbl">ยุทธศาสตร์ <span class="hint">· กดเลือกได้มากกว่า 1 ยุทธศาสตร์</span></span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
     <div class="fld"><label for="fF">แผนงานหลัก</label><select id="fF"><option value="">ทั้งหมด</option>${Fopts.map(p=>`<option value="${p.code}" ${f.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`).join('')}</select></div>
     <div class="fld"><label for="fS">มาตรการ</label><select id="fS"><option value="">ทั้งหมด</option>${Sopts.map(m=>`<option value="${m.code}" ${f.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`).join('')}</select></div>
     <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div>
     <div class="fld"><label for="fR">แหล่งที่มา</label><select id="fR"><option value="">ทั้งหมด</option><option value="excel" ${f.src==='excel'?'selected':''}>จากแผนแม่บท</option><option value="new" ${f.src==='new'?'selected':''}>เพิ่มใหม่</option></select></div>
-    <div class="fcount">${filterActive()?`พบ <b class="num">${fmt(filt(P).length)}</b> จาก ${fmt(P.length)} โครงการ · <button class="linkbtn" data-act="clear">ล้างตัวกรอง</button>`:`${fmt(P.length)} โครงการ`}</div>`;
+    <div class="fcount">${scopeCount()}</div>`;
+}
+function scopeCount(){
+  let base = P, label = '';
+  if(S.tab==='area' && S.prov){
+    const ids = new Set(M.tambons.filter(t=>t.p===S.prov && (!S.amp||t.a===S.amp) && (!S.tam||t.id===S.tam)).map(t=>t.id));
+    base = P.filter(p=>(p.tambons||[]).some(id=>ids.has(id)));
+    label = S.tam ? 'ต.'+T[S.tam].t : S.amp ? 'อ.'+S.amp : 'จ.'+S.prov;
+  } else if(S.tab==='basin' && S.basin){ base = P.filter(p=>p.sb===S.basin); label = S.basin; }
+  const n = filt(base).length;
+  const where = label ? ` ใน${esc(label)}` : '';
+  return filterActive()
+    ? `พบ <b class="num">${fmt(n)}</b> จาก ${fmt(base.length)} โครงการ${where} · <button class="linkbtn" data-act="clear">ล้างตัวกรอง</button>`
+    : `${fmt(base.length)} โครงการ${where}`;
 }
 function shortS(n){ return ({1:'อุปโภคบริโภค',2:'ภาคการผลิต',3:'ท่วม–แล้ง',4:'ระบบนิเวศ',5:'บริหารจัดการ'})[n]; }
 
@@ -738,7 +763,7 @@ function exportXlsx(){
 }
 
 /* ================= ROUTING & EVENTS ================= */
-function setTab(t){ S.tab=t; $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===t)); try{ history.replaceState(null,'','#'+t); }catch(e){} renderView(); }
+function setTab(t){ S.tab=t; $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===t)); try{ history.replaceState(null,'','#'+t); }catch(e){} renderFilters(); renderView(); }
 function renderView(){
   if(!M) return;
   $('#filters').hidden = S.tab==='admin';
@@ -753,11 +778,11 @@ function bind(){
     const sub = ()=>SUBS.find(s=>s._id===a.dataset.sid);
     switch(act){
       case 'close': closeModal(); break;
-      case 'goprov': S.prov=v||null; S.amp=null; S.tam=null; renderView(); break;
-      case 'goamp': S.amp=v; S.tam=null; renderView(); break;
-      case 'gotam': S.tam=v; renderView(); break;
+      case 'goprov': S.prov=v||null; S.amp=null; S.tam=null; renderFilters(); renderView(); break;
+      case 'goamp': S.amp=v; S.tam=null; renderFilters(); renderView(); break;
+      case 'gotam': S.tam=v; renderFilters(); renderView(); break;
       case 'gotamfull': { const t=T[v]; S.prov=t.p; S.amp=t.a; S.tam=v; closeModal(); setTab('area'); window.scrollTo({top:0}); break; }
-      case 'up': if(S.tam) S.tam=null; else if(S.amp) S.amp=null; else S.prov=null; renderView(); break;
+      case 'up': if(S.tam) S.tam=null; else if(S.amp) S.amp=null; else S.prov=null; renderFilters(); renderView(); break;
       case 'gobasin': S.basin=v||null; closeModal(); setTab('basin'); window.scrollTo({top:0}); break;
       case 'maptam': { const t=T[v]; mapSel=v; Object.assign(MS,{kind:'admin',prov:t.p,amp:t.a,tam:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='admin')); afterScope(); } break; }
       case 'mapbasin': Object.assign(MS,{kind:'basin',basin:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='basin')); afterScope(); } break;
@@ -798,6 +823,10 @@ function bind(){
   });
   $('#filters').addEventListener('change', e=>{
     const id=e.target.id; if(id==='fq') return;
+    if(id==='fLp'){ S.prov=e.target.value||null; S.amp=null; S.tam=null; }
+    if(id==='fLa'){ S.amp=e.target.value||null; S.tam=null; }
+    if(id==='fLt'){ S.tam=e.target.value||null; }
+    if(id==='fLb'){ S.basin=e.target.value||null; }
     if(id==='fF'){ S.f.F=e.target.value; S.f.S=''; } if(id==='fS') S.f.S=e.target.value; if(id==='fG') S.f.grp=e.target.value; if(id==='fR') S.f.src=e.target.value;
     renderFilters(); renderView();
   });

@@ -258,3 +258,7 @@ details.basin-level .inner{padding:10px}
 .role-b[data-act="enteruser"]:hover{border-color:var(--blue);background:var(--blue-soft)}
 .role-b[data-v="admin"][aria-pressed="true"]{border-color:var(--pink);background:var(--pink-soft);box-shadow:inset 0 0 0 1px var(--pink)}
 .remember{display:flex;gap:8px;align-items:center;font-size:.84rem;color:var(--muted)}
+
+.locrow{display:flex;gap:8px 10px;flex-wrap:wrap;align-items:end;padding:8px 10px;background:var(--blue-soft);border-radius:8px;flex:1 1 100%}
+.locrow .fld select{min-width:170px;max-width:260px}
+@media (max-width:520px){.locrow .fld{flex:1 1 100%}.locrow .fld select{max-width:none;width:100%}}
