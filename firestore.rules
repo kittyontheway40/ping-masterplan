@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ผู้ดูแลระบบ = มีเอกสารใน /admins/{uid}  (เพิ่มเองใน Firebase Console เท่านั้น)
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // โครงการที่อนุมัติแล้ว: ทุกคนอ่านได้โดยไม่ต้องล็อกอิน, เขียนได้เฉพาะผู้ดูแล
+    match /projects/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // กล่องรอพิจารณา: ใครก็ส่งได้ แต่อ่าน/แก้/ลบได้เฉพาะผู้ดูแล
+    match /submissions/{id} {
+      allow create: if request.resource.data.review == 'pending'
+        && request.resource.data.keys().hasOnly(['sb','ref','s','F','S','title','detail','tambons','agency','budget',
+             'yearStart','yearEnd','status','note','proposer','proposerOrg','proposerContact','review','createdAt'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 5 && request.resource.data.title.size() <= 300
+        && request.resource.data.detail.size() <= 3000
+        && request.resource.data.tambons is list && request.resource.data.tambons.size() <= 120
+        && request.resource.data.proposer is string && request.resource.data.proposer.size() > 0
+        && request.resource.data.proposerOrg is string && request.resource.data.proposerOrg.size() > 0
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // รายชื่อผู้ดูแล: แต่ละคนอ่านได้เฉพาะของตัวเอง, ห้ามเขียนจากหน้าเว็บ
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // ประวัติการแก้ไข: ผู้ดูแลเพิ่มและอ่านได้ ห้ามแก้หรือลบย้อนหลัง
+    match /audit/{id} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}
