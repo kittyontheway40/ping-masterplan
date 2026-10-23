@@ -269,7 +269,7 @@ function grpCounts(tams){
   const c = {}; tams.forEach(t=>t.grp.forEach(g=>c[g]=(c[g]||0)+1));
   const keys = Object.keys(c).sort((a,b)=>a[0]===b[0]? +a.slice(1)-+b.slice(1) : 'WPREG'.indexOf(a[0])-'WPREG'.indexOf(b[0]));
   if(!keys.length) return '<div class="note">ไม่มีตำบลที่จัดอยู่ในกลุ่มพื้นที่ปัญหา</div>';
-  return `<div class="grp-list">${keys.map(k=>`<div class="grp-item"><span class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</span><span>${esc(M.groups[k]||'')}</span><span class="n">${c[k]} ตำบล</span></div>`).join('')}</div>`;
+  return `<div class="grp-list">${keys.map(k=>`<span class="grp-item" title="${esc(M.groupFamilies[k[0]]||'')}"><b class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</b>${esc(M.groups[k]||'')}<span class="n">${c[k]}</span></span>`).join('')}</div><div class="note" style="margin-top:4px">ตัวเลข = จำนวนตำบล</div>`;
 }
 function tamInfo(t, compact){
   const sbs = t.sb.map((b,i)=>`${esc(b)}${t.sbPct[i]!=null?` <span class="note">(${t.sbPct[i]}% ของตำบล)</span>`:''}`).join('<br>');
