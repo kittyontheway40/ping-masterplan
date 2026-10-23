@@ -362,16 +362,16 @@ function renderArea(){
   let tree='', head='', crumbs = `<button data-act="goprov" data-v="">ทั้ง 6 จังหวัดในลุ่มน้ำปิง</button>`;
   if(!S.prov){
     head = 'จังหวัด';
-    tree = M.provinces.map(pv=>{ const ts=M.tambons.filter(t=>t.p===pv); return `<button class="tree-item" data-act="goprov" data-v="${esc(pv)}"><span class="nm">จ.${esc(pv)}</span><span class="ct">${ts.length} ต. · ${fmt(projIn(ts).length)} โครงการ</span></button>`; }).join('');
+    tree = M.provinces.map(pv=>{ const ts=M.tambons.filter(t=>t.p===pv); return `<button class="nav-chip" data-act="goprov" data-v="${esc(pv)}">จ.${esc(pv)} <span class="ct">${ts.length} ต. · ${fmt(projIn(ts).length)}</span></button>`; }).join('');
   } else if(!S.amp){
     head = `อำเภอใน จ.${S.prov}`;
     const amps = [...new Set(M.tambons.filter(t=>t.p===S.prov).map(t=>t.a))].sort((a,b)=>a.localeCompare(b,'th'));
-    tree = amps.map(a=>{ const ts=M.tambons.filter(t=>t.p===S.prov&&t.a===a); const tg=ts.filter(t=>t.target).length; return `<button class="tree-item" data-act="goamp" data-v="${esc(a)}"><span class="nm">อ.${esc(a)}</span><span class="ct">${ts.length} ต.${tg?` · เป้าหมาย ${tg}`:''} · ${fmt(projIn(ts).length)}</span></button>`; }).join('');
+    tree = amps.map(a=>{ const ts=M.tambons.filter(t=>t.p===S.prov&&t.a===a); const tg=ts.filter(t=>t.target).length; return `<button class="nav-chip" data-act="goamp" data-v="${esc(a)}" title="${ts.length} ตำบล · เป้าหมาย ${tg} · ${fmt(projIn(ts).length)} โครงการ">อ.${esc(a)} <span class="ct">${ts.length} ต. · ${fmt(projIn(ts).length)}</span></button>`; }).join('');
     crumbs += `<span class="sep">›</span><strong>จ.${esc(S.prov)}</strong>`;
   } else {
     head = `ตำบลใน อ.${S.amp}`;
     const ts = M.tambons.filter(t=>t.p===S.prov&&t.a===S.amp).sort((a,b)=>a.t.localeCompare(b.t,'th'));
-    tree = ts.map(t=>{ const n = projIn([t]).length; return `<button class="tree-item" data-act="gotam" data-v="${t.id}" aria-current="${S.tam===t.id}"><span class="dot" style="background:${t.target?'var(--blue)':'var(--p0)'}"></span><span class="nm">ต.${esc(t.t)}</span><span class="ct">${n?fmt(n)+' โครงการ':'ไม่มีโครงการ'}</span></button>`; }).join('');
+    tree = ts.map(t=>{ const n = projIn([t]).length; return `<button class="nav-chip" data-act="gotam" data-v="${t.id}" aria-current="${S.tam===t.id}" title="${t.target?'พื้นที่เป้าหมาย':'ไม่ใช่พื้นที่เป้าหมาย'}"><i class="dot" style="background:${t.target?'var(--blue)':'var(--p0)'}"></i>ต.${esc(t.t)} <span class="ct">${fmt(n)}</span></button>`; }).join('');
     crumbs += `<span class="sep">›</span><button data-act="goprov" data-v="${esc(S.prov)}">จ.${esc(S.prov)}</button><span class="sep">›</span>${S.tam?`<button data-act="goamp" data-v="${esc(S.amp)}">อ.${esc(S.amp)}</button><span class="sep">›</span><strong>ต.${esc(T[S.tam].t)}</strong>`:`<strong>อ.${esc(S.amp)}</strong>`}`;
   }
   // detail
@@ -380,7 +380,7 @@ function renderArea(){
     const t = T[S.tam];
     const pj = projIn([t]);
     const bl = filt(P).filter(p=>!(p.tambons||[]).length && t.sb.includes(p.sb));
-    detail = `<div class="info"><h2>ต.${esc(t.t)} <span class="note" style="font-size:.9rem">อ.${esc(t.a)} จ.${esc(t.p)}</span></h2>${tamInfo(t)}
+    detail = `<div class="info"><h2>ต.${esc(t.t)} <span class="note" style="font-size:.9rem">อ.${esc(t.a)} จ.${esc(t.p)}</span></h2><!--NAV-->${tamInfo(t)}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="maptam" data-v="${t.id}">ดูบนแผนที่</button>${t.sb.map(b=>`<button class="btn sm" data-act="gobasin" data-v="${esc(b)}">ลุ่มน้ำสาขา${esc(b)}</button>`).join('')}</div></div>
       <div class="sec-h"><h3>โครงการที่มีตำบลนี้เป็นพื้นที่เป้าหมาย (${fmt(pj.length)})</h3><button class="btn sm pink" data-act="newproj" data-tam="${t.id}">+ เสนอโครงการในตำบลนี้</button></div>
       ${projTable('tam', pj, {name:`ต.${t.t}_อ.${t.a}_จ.${t.p}`, empty: t.target ? 'ยังไม่มีโครงการที่ระบุตำบลนี้เป็นพื้นที่เป้าหมาย' : 'ไม่มีโครงการ — ตำบลนี้ไม่ได้เป็นพื้นที่เป้าหมายของแผนแม่บท'})}
@@ -390,7 +390,7 @@ function renderArea(){
     const tg = ts.filter(t=>t.target); const pj = projIn(ts);
     const lvl = S.amp ? `อ.${S.amp} จ.${S.prov}` : S.prov ? `จ.${S.prov}` : 'ทั้ง 6 จังหวัดในลุ่มน้ำปิง';
     const sbs = [...new Set(ts.flatMap(t=>t.sb))];
-    detail = `<div class="info"><h2>${esc(lvl)}</h2>
+    detail = `<div class="info"><h2>${esc(lvl)}</h2><!--NAV-->
       <div class="sumgrid" style="margin-top:10px">
         <div class="stat"><div class="v">${fmt(ts.filter(t=>t.geo).length)}</div><div class="l">ตำบลในลุ่มน้ำปิง</div></div>
         <div class="stat"><div class="v">${fmt(tg.length)}</div><div class="l">ตำบลเป้าหมาย</div></div>
@@ -403,10 +403,8 @@ function renderArea(){
     <div class="sec-h"><h3>โครงการในพื้นที่ (${fmt(pj.length)})</h3><span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมาย</span></div>
     ${projTable('area', pj, {name: lvl})}`;
   }
-  el.innerHTML = `<div class="crumbs">${crumbs}</div><div class="split">
-    <div class="panel"><div class="panel-h"><h3>${esc(head)}</h3>${S.prov?`<button class="btn sm" data-act="up">ย้อนกลับ</button>`:''}</div><div class="tree">${tree}</div>
-    ${S.amp?`<div class="legend" style="padding:8px 14px"><span><i class="dot" style="background:var(--blue)"></i>พื้นที่เป้าหมาย</span><span><i class="dot" style="background:var(--p0)"></i>ไม่ใช่เป้าหมาย</span></div>`:''}</div>
-    <div style="min-width:0">${detail}</div></div>`;
+  const nav = `<div class="navbox"><div class="navbox-h"><span class="lbl">${esc(head)} · กดเพื่อดูลึกลงไป · ตัวเลข = ${S.amp?'จำนวนโครงการ':'ตำบล · โครงการ'}</span>${S.prov?`<button class="linkbtn" data-act="up">ย้อนกลับ</button>`:''}</div><div class="nav-chips">${tree}</div>${S.amp?`<div class="legend"><span><i class="dot" style="background:var(--blue)"></i>พื้นที่เป้าหมาย</span><span><i class="dot" style="background:var(--p0)"></i>ไม่ใช่เป้าหมาย</span></div>`:''}</div>`;
+  el.innerHTML = `<div class="crumbs">${crumbs}</div>${detail.replace('<!--NAV-->', nav)}`;
 }
 
 /* ================= VIEW: BASIN ================= */

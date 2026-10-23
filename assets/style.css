@@ -306,3 +306,13 @@ td.grp{min-width:130px}
 .credit{gap:12px}
 
 .top .ver{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:7px;font-size:.68rem;padding:1px 8px;opacity:.85}
+
+.navbox{margin:8px 0 12px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.navbox-h{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.nav-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.nav-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line-2);background:var(--bg);border-radius:6px;padding:3px 9px;font-size:.86rem;cursor:pointer;white-space:nowrap}
+.nav-chip:hover{border-color:var(--blue);color:var(--blue)}
+.nav-chip[aria-current="true"]{background:var(--blue);border-color:var(--blue);color:#fff}
+.nav-chip[aria-current="true"] .ct{color:#fff;background:rgba(255,255,255,.2)}
+.nav-chip .ct{font-size:.72rem;color:var(--muted);background:var(--surface-2);border-radius:99px;padding:0 6px;font-variant-numeric:tabular-nums}
+.navbox .legend{margin-top:6px}
