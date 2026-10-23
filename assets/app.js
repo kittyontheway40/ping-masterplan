@@ -454,7 +454,7 @@ function renderBasin(){
 
 /* ================= VIEW: MAP ================= */
 let MAP=null, L_T=null, L_SB=null, L_PV=null, L_AM=null, L_RV=null, L_HS=null, L_BASE=null, L_LBL=null, GEO={};
-let mapMode='target', mapStrat=3, mapSel=null, mapOp=.55, MF={active:false,cnt:{}};
+let mapMode='target', mapStrat='all', L_PIE=null, mapSel=null, mapOp=.55, MF={active:false,cnt:{}};
 const MS = {kind:'basin', basin:'', prov:'', amp:'', tam:''};
 const RIVER='#2a7fd4';
 async function loadGeo(){
@@ -480,10 +480,31 @@ function inScope(t){
   if(MS.kind==='basin' && MS.basin && !t.sb.includes(MS.basin)) return false;
   return (!MS.prov||t.p===MS.prov) && (!MS.amp||t.a===MS.amp) && (!MS.tam||t.id===MS.tam);
 }
+function pieSVG(list, d){
+  const r = d/2, n = list.length;
+  if(n===1) return `<svg width="${d}" height="${d}" viewBox="0 0 ${d} ${d}"><circle cx="${r}" cy="${r}" r="${r-1}" fill="${SHEX[list[0]]}" stroke="#fff" stroke-width="1.5"/></svg>`;
+  let a0 = -Math.PI/2, paths = '';
+  list.forEach(k=>{ const a1 = a0 + 2*Math.PI/n; const rr = r-1;
+    const x0 = r+rr*Math.cos(a0), y0 = r+rr*Math.sin(a0), x1 = r+rr*Math.cos(a1), y1 = r+rr*Math.sin(a1);
+    paths += `<path d="M${r},${r} L${x0.toFixed(2)},${y0.toFixed(2)} A${rr},${rr} 0 ${a1-a0>Math.PI?1:0} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${SHEX[k]}"/>`; a0 = a1; });
+  return `<svg width="${d}" height="${d}" viewBox="0 0 ${d} ${d}">${paths}<circle cx="${r}" cy="${r}" r="${r-1}" fill="none" stroke="#fff" stroke-width="1.5"/></svg>`;
+}
+function refreshPies(){
+  if(!MAP) return;
+  if(L_PIE){ L_PIE.remove(); L_PIE=null; }
+  if(!(mapMode==='strat' && mapStrat==='all')) return;
+  const z = MAP.getZoom(); const d = z<8 ? 10 : z<9 ? 14 : z<10 ? 18 : 22;
+  L_PIE = L.layerGroup();
+  L_T.getLayers().forEach(l=>{ const t=T[l.feature.properties.id]; if(!t || !t.strat.length || !inScope(t) || !tamMatch(t)) return;
+    L.marker(l.getBounds().getCenter(), {interactive:false, keyboard:false, icon:L.divIcon({className:'pie', html:pieSVG(t.strat,d), iconSize:[d,d], iconAnchor:[d/2,d/2]})}).addTo(L_PIE); });
+  L_PIE.addTo(MAP);
+}
+function restyle(){ L_T.setStyle(tamStyle); refreshPies(); }
 function tamStyle(f){
   const t = T[f.properties.id]; let fill='#cfd6e2', op=mapOp;
   if(mapMode==='target'){ fill = t?.target ? TGHEX : '#ffffff'; if(!t?.target) op = mapOp*.35; }
   else if(mapMode==='count'){ const n = MF.cnt[t.id]||0; const ramp=['#ffffff','#c6d7ee','#8fb0dd','#4f7fc2','#2c5ea5','#1d3766']; fill = ramp[n===0?0:n<=3?1:n<=6?2:n<=10?3:n<=15?4:5]; if(!n) op=mapOp*.35; }
+  else if(mapMode==='strat' && mapStrat==='all'){ const n = t?.strat.length||0; fill = ['#ffffff','#e3e7ee','#c9d0dc','#a9b3c4','#8692a8','#6b7790'][n]; if(!n) op=mapOp*.35; }
   else if(mapMode==='strat'){ const on = t?.strat.includes(+mapStrat); fill = on ? SHEX[mapStrat] : '#ffffff'; if(!on) op=mapOp*.35; }
   if(!inScope(t) && mapSel!==f.properties.id) return {opacity:0, fillOpacity:0, weight:0};
   const live = tamMatch(t) || mapSel===f.properties.id;
@@ -541,7 +562,7 @@ function bindScope(){
 function afterScope(){
   $('#mScope').innerHTML = scopeTools(); bindScope();
   if(MS.kind!=='admin' || !MS.tam){ if(mapSel && !inScope(T[mapSel])) mapSel=null; }
-  mapBoundaryLayers(); L_T.setStyle(tamStyle); mapLabels(); fitScope(); mapLegend(); mapProjects();
+  mapBoundaryLayers(); restyle(); mapLabels(); fitScope(); mapLegend(); mapProjects();
   if(L_HS) L_HS.setOpacity((MS.basin && MS.kind==='basin') || MS.prov ? .5 : 1);
   if(MS.tam){ const l=L_T.getLayers().find(x=>x.feature.properties.id===MS.tam); if(l) MAP.fitBounds(l.getBounds(), {maxZoom:11, padding:[30,30]}); mapPick(MS.tam, true); }
 }
@@ -557,7 +578,7 @@ async function renderMap(){
       </div>
       <div class="map-tools">
         <div class="fld"><label for="mMode">ระบายสีตำบลตาม</label><select id="mMode"><option value="target">พื้นที่เป้าหมาย</option><option value="count">จำนวนโครงการ</option><option value="strat">ยุทธศาสตร์ที่มีปัญหา</option></select></div>
-        <div class="fld" id="mStratWrap" hidden><label for="mStrat">ยุทธศาสตร์</label><select id="mStrat">${M.strategies.map(s=>`<option value="${s.n}" ${s.n==3?'selected':''}>${s.n} ${esc(s.short)}</option>`).join('')}</select></div>
+        <div class="fld" id="mStratWrap" hidden><label for="mStrat">ยุทธศาสตร์</label><select id="mStrat"><option value="all" selected>แสดงครบทั้ง 5 ยุทธศาสตร์</option>${M.strategies.map(s=>`<option value="${s.n}">${s.n} ${esc(s.short)}</option>`).join('')}</select></div>
         <div class="fld"><label for="mOp">ความเข้มสีตำบล</label><input id="mOp" type="range" min="0" max="90" value="${Math.round(mapOp*100)}"></div>
         <label class="chip"><input type="checkbox" id="mHS" checked> ภูมิประเทศ (DEM)</label>
         ${CFG.basemap?`<div class="fld"><label for="mBase">แผนที่ฐาน</label><select id="mBase"><option value="gray">แผนที่สีเทา</option><option value="osm">OpenStreetMap</option><option value="sat">ภาพถ่ายดาวเทียม</option><option value="none">ไม่แสดง</option></select></div>`:''}
@@ -577,16 +598,16 @@ async function renderMap(){
     L_AM = L.geoJSON(GEO.am, {interactive:false});
     L_SB = L.geoJSON(GEO.sb, {interactive:false});
     L_RV = L.geoJSON(GEO.rv, {style:{color:RIVER, weight:2.2, opacity:.95}, interactive:false}).addTo(MAP);
-    $('#mMode').onchange = e=>{ mapMode=e.target.value; $('#mStratWrap').hidden = mapMode!=='strat'; L_T.setStyle(tamStyle); mapLegend(); };
-    $('#mStrat').onchange = e=>{ mapStrat=e.target.value; L_T.setStyle(tamStyle); mapLegend(); };
-    $('#mOp').oninput = e=>{ mapOp = e.target.value/100; L_T.setStyle(tamStyle); };
+    $('#mMode').onchange = e=>{ mapMode=e.target.value; $('#mStratWrap').hidden = mapMode!=='strat'; restyle(); mapLegend(); };
+    $('#mStrat').onchange = e=>{ mapStrat=e.target.value; restyle(); mapLegend(); };
+    $('#mOp').oninput = e=>{ mapOp = e.target.value/100; restyle(); };
     $('#mHS').onchange = e=> e.target.checked ? L_HS.addTo(MAP) : L_HS.remove();
     if($('#mBase')) $('#mBase').onchange = e=> setBase(e.target.value);
-    MAP.on('zoomend', labelZoom);
+    MAP.on('zoomend', ()=>{ labelZoom(); refreshPies(); });
     afterScope();
     if(mapSel && !MS.tam) mapPick(mapSel, false);
   } else {
-    L_T.setStyle(tamStyle); mapLegend(); mapProjects();
+    restyle(); mapLegend(); mapProjects();
     if(MF.active) fitScope();
     setTimeout(()=>MAP.invalidateSize(),50);
   }
@@ -620,7 +641,8 @@ function mapLegend(){
   let h='';
   if(mapMode==='target') h = `<span><i style="background:${TGHEX}"></i>พื้นที่เป้าหมาย (212 ตำบล)</span><span><i style="background:#ffffff"></i>ไม่ใช่พื้นที่เป้าหมาย</span>`;
   if(mapMode==='count') h = [['#ffffff','0'],['#c6d7ee','1–3'],['#8fb0dd','4–6'],['#4f7fc2','7–10'],['#2c5ea5','11–15'],['#1d3766','มากกว่า 15']].map(([c,l])=>`<span><i style="background:${c}"></i>${l} โครงการ</span>`).join('');
-  if(mapMode==='strat') h = `<span><i style="background:${SHEX[mapStrat]}"></i>มีปัญหาด้าน${esc(STRAT[mapStrat].short)}</span><span><i style="background:#ffffff"></i>ไม่พบปัญหาด้านนี้</span>`;
+  if(mapMode==='strat' && mapStrat==='all') h = M.strategies.map(st=>`<span><i style="background:${SHEX[st.n]};border-radius:50%"></i>ยศ.${st.n} ${esc(st.short)}</span>`).join('') + `<span class="note">วงกลมในตำบลแบ่งสีตามยุทธศาสตร์ที่มีปัญหา · พื้นตำบลยิ่งเข้มยิ่งมีปัญหาหลายด้าน</span>`;
+  else if(mapMode==='strat') h = `<span><i style="background:${SHEX[mapStrat]}"></i>มีปัญหาด้าน${esc(STRAT[mapStrat].short)}</span><span><i style="background:#ffffff"></i>ไม่พบปัญหาด้านนี้</span>`;
   h += `<span><i style="background:${RIVER};height:3px;border:0"></i>แม่น้ำปิงและลำน้ำสายหลัก</span><span><i style="background:transparent;border:2px solid #1d3766"></i>${MS.kind==='basin'?'ขอบเขตลุ่มน้ำสาขา':'ขอบเขตจังหวัด/อำเภอ'}</span>`;
   const n = M.tambons.filter(t=>t.geo && inScope(t) && tamMatch(t)).length;
   const fl = filt(P);
@@ -641,7 +663,7 @@ function tamPopup(t){
     <button class="btn sm primary" data-act="gotamfull" data-v="${t.id}" style="margin-top:6px">เปิดหน้าตำบล</button></div>`;
 }
 function mapPick(id, noZoom, noPopup, latlng){
-  mapSel = id; L_T.setStyle(tamStyle);
+  mapSel = id; restyle();
   const t = T[id]; const pj = filt(IDX.byTam[id]||[]);
   const lyr = L_T.getLayers().find(l=>l.feature.properties.id===id);
   if(lyr){ lyr.bringToFront(); L_RV.bringToFront(); }
@@ -870,7 +892,7 @@ function bind(){
       case 'gobasin': S.basin=v||null; S.bprov=S.bamp=S.btam=null; closeModal(); setTab('basin'); window.scrollTo({top:0}); break;
       case 'maptam': { const t=T[v]; mapSel=v; Object.assign(MS,{kind:'admin',prov:t.p,amp:t.a,tam:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='admin')); afterScope(); } break; }
       case 'mapbasin': Object.assign(MS,{kind:'basin',basin:v}); setTab('map'); if(MAP){ $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='basin')); afterScope(); } break;
-      case 'mapunsel': mapSel=null; MAP && MAP.closePopup(); L_T.setStyle(tamStyle); $('#mapSide').innerHTML='<div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่</div>'; mapProjects(); break;
+      case 'mapunsel': mapSel=null; MAP && MAP.closePopup(); restyle(); $('#mapSide').innerHTML='<div class="panel-h"><h3>ข้อมูลตำบล</h3></div><div style="padding:14px" class="note">คลิกตำบลบนแผนที่เพื่อดูข้อมูลพื้นที่</div>'; mapProjects(); break;
       case 'mapgoproj': $('#mapProj')?.scrollIntoView({behavior:'smooth'}); break;
       case 'keyf': { const pnl=$('#keyfPanel'); const open = a.getAttribute('aria-expanded')==='true';
         $$('.keyf-c').forEach(c=>c.setAttribute('aria-expanded','false'));

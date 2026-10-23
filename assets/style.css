@@ -317,3 +317,4 @@ td.grp{min-width:130px}
 .nav-chip .ct{font-size:.72rem;color:var(--muted);background:var(--surface-2);border-radius:99px;padding:0 6px;font-variant-numeric:tabular-nums}
 .navbox .legend{margin-top:6px}
 .nav-note{margin-top:6px;font-size:.76rem}
+.leaflet-marker-icon.pie{background:none;border:0;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
