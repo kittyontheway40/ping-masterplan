@@ -163,6 +163,23 @@ const Store = {
     b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ลบโครงการ', id, detail:old?.title||''});
     await b.commit();
   },
+  async syncSeed(onProgress){
+    const PLAN_F = ['sb','s','F','S','title','detail','tambons','ref'];
+    const byId = Object.fromEntries(P.map(p=>[p.id,p]));
+    const seedIds = new Set(SEED.map(p=>p.id));
+    const todo = SEED.filter(sp=>{ const cur=byId[sp.id]; return !cur || PLAN_F.some(f=>JSON.stringify(cur[f]??'')!==JSON.stringify(sp[f]??'')); });
+    const gone = P.filter(p=>p.src!=='new' && !seedIds.has(p.id));
+    const merged = todo.map(sp=>{ const cur=byId[sp.id]||{}; const o=Object.assign({}, normProj(sp), cur.id?{agency:cur.agency||'',budget:cur.budget??null,yearStart:cur.yearStart??null,yearEnd:cur.yearEnd??null,status:cur.status||'',note:cur.note||''}:{}); return o; });
+    if(this.mode==='demo'){
+      this.demoSave(o=>{ merged.forEach(m=>{ if(o.edited[m.id]) o.edited[m.id]=Object.assign({}, o.edited[m.id], pickPlan(m)); }); });
+      this.demoAudit('อัปเดตข้อมูลจาก Excel ฉบับใหม่','-', merged.length+' โครงการ'); return {n:merged.length, gone:gone.length};
+    }
+    const N = 15;
+    for(let i=0;i<merged.length;i+=N){ const b=this.db.batch(); merged.slice(i,i+N).forEach(m=>b.set(this.db.doc('projects/'+m.id), m)); await b.commit(); onProgress && onProgress(Math.min(i+N,merged.length), merged.length); }
+    for(let i=0;i<gone.length;i+=N){ const b=this.db.batch(); gone.slice(i,i+N).forEach(m=>b.delete(this.db.doc('projects/'+m.id))); await b.commit(); }
+    await this.db.collection('audit').add({ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'อัปเดตข้อมูลจาก Excel ฉบับใหม่', id:'-', detail:`ปรับ ${merged.length} โครงการ${gone.length?` · ลบ ${gone.length}`:''} (คงสถานะ/หน่วยงาน/งบประมาณที่ผู้ดูแลกรอกไว้)`});
+    return {n:merged.length, gone:gone.length};
+  },
   async seed(onProgress){
     if(this.mode!=='firebase') return;
     const all = SEED.map(normProj);
@@ -177,6 +194,8 @@ const Store = {
 };
 const PROJ_FIELDS = ['sb','ref','s','F','S','title','detail','tambons','agency','budget','yearStart','yearEnd','status','note'];
 const FIELD_TH = {sb:'ลุ่มน้ำสาขา',ref:'ตารางอ้างอิง',s:'ยุทธศาสตร์',F:'แผนงาน',S:'มาตรการ',title:'ชื่อแนวทาง/โครงการ',detail:'รายละเอียด',tambons:'ตำบลเป้าหมาย',agency:'หน่วยงานรับผิดชอบ',budget:'งบประมาณ',yearStart:'ปีเริ่ม',yearEnd:'ปีสิ้นสุด',status:'สถานะ',note:'หมายเหตุ'};
+function pickPlan(d){ const o={}; ['sb','s','F','S','title','detail','tambons','ref'].forEach(k=>o[k]=d[k]); return o; }
+function seedDiffCount(){ const byId=Object.fromEntries(P.map(p=>[p.id,p])); return SEED.filter(sp=>{ const c=byId[sp.id]; return !c || ['sb','s','F','S','title','detail','tambons','ref'].some(f=>JSON.stringify(c[f]??'')!==JSON.stringify(sp[f]??'')); }).length; }
 function pickProj(d){ const o={}; PROJ_FIELDS.forEach(k=>{ if(k in d) o[k]=d[k]; }); return o; }
 
 /* ================= INDEX & FILTER ================= */
@@ -757,6 +776,7 @@ function renderAdmin(){
   el.innerHTML = `<div class="sec-h" style="margin-top:0"><h2>กล่องรอพิจารณา (${SUBS.length})</h2><span class="note">โครงการที่มีผู้เสนอเข้ามาจะยังไม่แสดงให้ทุกคนเห็น จนกว่าผู้ดูแลจะอนุมัติ</span></div>
   <div class="stack">${subs || '<div class="empty">ไม่มีโครงการรอพิจารณา</div>'}</div>
   ${S.seedFallback?`<div class="info" style="margin-top:18px;border-color:var(--pink)"><h3>ฐานข้อมูลออนไลน์ยังว่าง</h3><p class="note">ตอนนี้หน้าเว็บแสดงข้อมูลตั้งต้นจากไฟล์ Excel แบบอ่านอย่างเดียว กดปุ่มนี้หนึ่งครั้งเพื่อนำเข้า ${fmt(SEED.length)} โครงการลงฐานข้อมูล ก่อนจึงจะแก้ไขได้</p><button class="btn pink" data-act="seed">นำเข้าข้อมูลตั้งต้น</button> <span id="seedProg" class="note"></span></div>`:''}
+  ${!S.seedFallback && seedDiffCount() ? `<div class="info" style="margin-top:18px;border-color:var(--blue)"><h3>มีข้อมูลแผนแม่บทฉบับใหม่</h3><p class="note">โครงการในฐานข้อมูล ${fmt(seedDiffCount())} รายการต่างจากไฟล์ Excel ฉบับล่าสุด (เช่น แผนงาน มาตรการ ชื่อ หรือตำบลเป้าหมาย) กดอัปเดตเพื่อใช้ข้อมูลตามไฟล์ใหม่ · ระบบจะคงสถานะ หน่วยงาน งบประมาณ ปี และหมายเหตุที่ผู้ดูแลกรอกไว้ และไม่แตะโครงการที่เพิ่มใหม่ผ่านเว็บ</p><button class="btn primary" data-act="syncseed">อัปเดตตาม Excel ฉบับใหม่</button> <span id="syncProg" class="note"></span></div>` : ''}
   <div class="sec-h"><h2>เครื่องมือข้อมูล</h2></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="export">ส่งออกโครงการเป็น Excel</button>${Store.mode==='demo'?'<button class="btn danger" data-act="demoreset">ล้างข้อมูลทดลองในเบราว์เซอร์นี้</button>':''}</div>
   <div id="resetBox"></div>
@@ -832,7 +852,6 @@ function openForm(mode, data={}, sub=null){
       <div class="fld"><label for="ff_yearStart">ปีเริ่ม (พ.ศ.)</label><input id="ff_yearStart" type="number" min="2560" max="2600" value="${esc(d.yearStart??'')}"></div>
       <div class="fld"><label for="ff_yearEnd">ปีสิ้นสุด (พ.ศ.)</label><input id="ff_yearEnd" type="number" min="2560" max="2600" value="${esc(d.yearEnd??'')}"></div>
       <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${(LEGACY[d.status]||d.status)===o?'selected':''}>${o}</option>`).join('')}</select></div>
-      <div class="fld"><label for="ff_ref">ตารางอ้างอิง</label><input id="ff_ref" value="${esc(d.ref)}" placeholder="เช่น 13-11"></div>
       <div class="fld full"><label for="ff_note">หมายเหตุ</label><input id="ff_note" value="${esc(d.note)}"></div>
     </div>
     <div class="err" id="ff_err" role="alert"></div>
@@ -996,6 +1015,7 @@ function bind(){
       case 'rejectok': { const s=sub(); try{ await Store.reject(s, $('#rr_'+CSS.escape(s._id)).value.trim()); toast('บันทึกว่าไม่อนุมัติแล้ว'); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
       case 'seed': { a.disabled=true; try{ await Store.seed((n,t)=>{ const el=$('#seedProg'); if(el) el.textContent=`นำเข้าแล้ว ${n}/${t}`; }); toast('นำเข้าข้อมูลตั้งต้นแล้ว'); }catch(err){ a.disabled=false; toast('นำเข้าไม่สำเร็จ: '+err.message); } break; }
       case 'export': exportXlsx(); break;
+      case 'syncseed': { a.disabled=true; try{ const r=await Store.syncSeed((n,t)=>{ const el=$('#syncProg'); if(el) el.textContent=`อัปเดตแล้ว ${n}/${t}`; }); toast(`อัปเดตตาม Excel ฉบับใหม่แล้ว ${fmt(r.n)} โครงการ`); renderView(); }catch(err){ a.disabled=false; toast('อัปเดตไม่สำเร็จ: '+err.message); } break; }
       case 'xls': { const T0=TABLES[a.dataset.key]; exportXlsx(T0.list, T0.opts.name); break; }
       case 'demoreset': $('#resetBox').innerHTML = `<div class="confirm-box" style="margin-top:8px"><span>ล้างโครงการที่เพิ่ม/แก้ไขในโหมดทดลองทั้งหมด?</span><button class="btn sm danger" data-act="demoresetok">ยืนยัน</button><button class="btn sm" data-act="demoresetno">ยกเลิก</button></div>`; break;
       case 'demoresetno': $('#resetBox').innerHTML=''; break;
