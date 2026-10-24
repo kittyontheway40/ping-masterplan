@@ -184,7 +184,10 @@ function buildIndex(){
     (IDX.byBasin[p.sb] ||= []).push(p);
   });
 }
-function tamInBasin(b){ return M.tambons.filter(t=>t.sb.includes(b)); }
+/* ตำบลหนึ่งอยู่ได้ลุ่มน้ำสาขาเดียว = ลุ่มที่ครอบคลุมพื้นที่ตำบลมากที่สุด (sb[0]) */
+const sbMain = t => t.sb[0] || '';
+function tamInBasin(b){ return M.tambons.filter(t=>sbMain(t)===b); }
+function tamInBasinAll(b){ return M.tambons.filter(t=>t.sb.includes(b)); }
 function projGroups(p){
   const g = new Set();
   (p.tambons||[]).forEach(id=>(T[id]?.grp||[]).forEach(c=>g.add(c)));
@@ -272,7 +275,7 @@ function grpCounts(tams){
   return `<div class="grp-list">${keys.map(k=>`<span class="grp-item" title="${esc(M.groupFamilies[k[0]]||'')}"><b class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</b>${esc(M.groups[k]||'')}<span class="n">${c[k]}</span></span>`).join('')}</div><div class="note" style="margin-top:4px">ตัวเลข = จำนวนตำบล</div>`;
 }
 function tamInfo(t, compact){
-  const sbs = t.sb.map((b,i)=>`${esc(b)}${t.sbPct[i]!=null?` <span class="note">(${t.sbPct[i]}% ของตำบล)</span>`:''}`).join('<br>');
+  const sbs = `<b>${esc(sbMain(t))}</b>${t.sbPct[0]!=null?` <span class="note">(${t.sbPct[0]}% ของพื้นที่ตำบล)</span>`:''}` + (t.sb.length>1 ? `<div class="note">คาบเกี่ยว: ${t.sb.slice(1).map((b,i)=>esc(b)+(t.sbPct[i+1]!=null?` ${t.sbPct[i+1]}%`:'')).join(', ')}</div>` : '');
   const grps = t.grp.length ? t.grp.map(g=>`<div><span class="pill code">${g}</span> ${esc(M.groups[g]||'')} <span class="note">· ${esc(M.groupFamilies[g[0]]||'')}</span></div>`).join('') : '<span class="note">ไม่อยู่ในกลุ่มพื้นที่ปัญหา</span>';
   return `<dl class="dl">
     <dt>สถานะเป้าหมาย</dt><dd>${tPill(t)} ${t.target?`<span class="note">พบปัญหา ${t.strat.length} ยุทธศาสตร์</span>`:'<span class="note">ไม่พบปัญหาเด่นตามเกณฑ์ 5 ยุทธศาสตร์</span>'}</dd>
@@ -389,7 +392,7 @@ function renderArea(){
     const ts = M.tambons.filter(t=>(!S.prov||t.p===S.prov)&&(!S.amp||t.a===S.amp));
     const tg = ts.filter(t=>t.target); const pj = projIn(ts);
     const lvl = S.amp ? `อ.${S.amp} จ.${S.prov}` : S.prov ? `จ.${S.prov}` : 'ทั้ง 6 จังหวัดในลุ่มน้ำปิง';
-    const sbs = [...new Set(ts.flatMap(t=>t.sb))];
+    const sbs = [...new Set(ts.map(sbMain).filter(Boolean))];
     detail = `<div class="info"><h2>${esc(lvl)}</h2><!--NAV-->
       <div class="sumgrid" style="margin-top:10px">
         <div class="stat"><div class="v">${fmt(ts.filter(t=>t.geo).length)}</div><div class="l">ตำบลในลุ่มน้ำปิง</div></div>
@@ -477,7 +480,7 @@ function tamMatch(t){
 }
 function inScope(t){
   if(!t) return false;
-  if(MS.kind==='basin' && MS.basin && !t.sb.includes(MS.basin)) return false;
+  if(MS.kind==='basin' && MS.basin && sbMain(t)!==MS.basin) return false;
   return (!MS.prov||t.p===MS.prov) && (!MS.amp||t.a===MS.amp) && (!MS.tam||t.id===MS.tam);
 }
 function pieSVG(list, d){
@@ -542,7 +545,7 @@ function mapBoundaryLayers(){
   L_RV.bringToFront();
 }
 function scopeTools(){
-  const pool = M.tambons.filter(t=>t.geo && (MS.kind!=='basin' || !MS.basin || t.sb.includes(MS.basin)));
+  const pool = M.tambons.filter(t=>t.geo && (MS.kind!=='basin' || !MS.basin || sbMain(t)===MS.basin));
   const provs = [...new Set(pool.map(t=>t.p))].sort((a,b)=>a.localeCompare(b,'th'));
   const amps = MS.prov ? [...new Set(pool.filter(t=>t.p===MS.prov).map(t=>t.a))].sort((a,b)=>a.localeCompare(b,'th')) : [];
   const tams = MS.amp ? pool.filter(t=>t.p===MS.prov&&t.a===MS.amp).sort((a,b)=>a.t.localeCompare(b.t,'th')) : [];
@@ -658,7 +661,7 @@ function tamPopup(t){
     <div class="pop-r">${tPill(t)}</div>
     ${t.strat.length?`<div class="pop-r">${t.strat.map(sPill).join(' ')}</div>`:''}
     ${t.grp.length?`<div class="pop-r"><span class="pop-k">กลุ่มพื้นที่</span> ${t.grp.join(', ')}</div>`:''}
-    <div class="pop-r"><span class="pop-k">ลุ่มน้ำสาขา</span> ${t.sb.map(esc).join(', ')}</div>
+    <div class="pop-r"><span class="pop-k">ลุ่มน้ำสาขา</span> ${esc(sbMain(t))}</div>
     <div class="pop-r"><span class="pop-k">โครงการ</span> <b>${fmt(n)}</b> รายการ${MF.proj?` · ตรงตัวกรอง ${fmt(nf)}`:''}</div>
     <button class="btn sm primary" data-act="gotamfull" data-v="${t.id}" style="margin-top:6px">เปิดหน้าตำบล</button></div>`;
 }
@@ -786,7 +789,7 @@ function openForm(mode, data={}, sub=null){
     const sb=$('#ff_sb').value, s=+$('#ff_s').value, none=$('#ff_none').checked;
     const box=$('#ff_tams');
     if(!sb){ box.innerHTML='<div class="note" style="padding:6px 10px">เลือกลุ่มน้ำสาขาก่อน</div>'; grpShow(); return; }
-    const ts = tamInBasin(sb).sort((a,b)=>(b.strat.includes(s)-a.strat.includes(s))||(b.target-a.target)||a.t.localeCompare(b.t,'th'));
+    const ts = tamInBasinAll(sb).sort((a,b)=>(b.strat.includes(s)-a.strat.includes(s))||(b.target-a.target)||a.t.localeCompare(b.t,'th'));
     box.innerHTML = ts.map(t=>`<label><input type="checkbox" value="${t.id}" ${picked.has(t.id)?'checked':''} ${none?'disabled':''}> ${t.strat.includes(s)?'★ ':''}ต.${esc(t.t)} อ.${esc(t.a)} จ.${esc(t.p)} ${t.target?'<span class="pill tg">เป้าหมาย</span>':''}</label>`).join('');
     grpShow();
   };
@@ -981,6 +984,7 @@ function fitTitle(){
 let fitT; window.addEventListener('resize', ()=>{ clearTimeout(fitT); fitT = setTimeout(fitTitle, 80); });
 if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
 window.addEventListener('load', fitTitle);
-setTimeout(fitTitle, 50);
+setTimeout(fitTitle, 50); setTimeout(fitTitle, 1200); setTimeout(fitTitle, 3500);
+if(window.ResizeObserver){ const ro = new ResizeObserver(()=>{ clearTimeout(fitT); fitT = setTimeout(fitTitle, 60); }); document.addEventListener('DOMContentLoaded', ()=>{ const b=document.querySelector('.brand'); if(b) ro.observe(b); }); const b0=document.querySelector('.brand'); if(b0) ro.observe(b0); }
 document.readyState==='loading' ? document.addEventListener('DOMContentLoaded', boot) : boot();
 })();

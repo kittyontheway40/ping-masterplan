@@ -47,7 +47,7 @@ a{color:var(--blue)}
 .proj{grid-area:proj;margin:0;font-size:.9rem;opacity:.9;min-width:0}
 .brand-row{display:flex;align-items:center;gap:14px;min-width:0}
 .brand-logo{flex:none;height:54px;width:auto;background:#ffffff;border-radius:6px;padding:3px 6px;box-sizing:content-box}
-.brand h1{font-size:clamp(.8rem,calc((100cqw - 134px) / 30),2.4rem);font-weight:600;line-height:1.22;white-space:nowrap;min-width:0;flex:1 1 auto;overflow:hidden}
+.brand h1{font-size:clamp(.8rem,calc((100cqw - 134px) / 30),2.4rem);font-weight:600;line-height:1.55;padding-top:.12em;white-space:nowrap;min-width:0;flex:1 1 auto;overflow:visible}
 .brand h1 .t2{font-weight:600}
 .brand h1 b{color:#f3a6c8;font-weight:700}
 .brand p{margin:0;font-size:.86rem;opacity:.88}
