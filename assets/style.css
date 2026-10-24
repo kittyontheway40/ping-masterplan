@@ -318,3 +318,30 @@ td.grp{min-width:130px}
 .navbox .legend{margin-top:6px}
 .nav-note{margin-top:6px;font-size:.76rem}
 .leaflet-marker-icon.pie{background:none;border:0;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+
+/* v3.1 declutter */
+.kpis{display:flex!important;flex-wrap:wrap;align-items:baseline;gap:2px 8px;background:none!important;border:0!important;border-radius:0;overflow:visible;margin-block:10px 2px;padding:0;font-size:.84rem;color:var(--muted)}
+.kpis .kl{font-weight:600;color:var(--fg);margin-right:4px}
+.kpis .ki b{color:var(--navy);font-weight:700;font-variant-numeric:tabular-nums}
+.kpis .ki b.pinkv{color:var(--pink)}
+.kpis .ksep{color:var(--faint)}
+:root[data-theme="dark"] .kpis .ki b{color:var(--blue)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .kpis .ki b{color:var(--blue)}}
+.tip{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--line-2);background:var(--bg);color:var(--muted);font:600 10px/1 Georgia,serif;font-style:italic;cursor:help;position:relative;vertical-align:middle;padding:0;margin-left:2px}
+.tip:hover,.tip:focus{border-color:var(--blue);color:var(--blue);outline:none}
+.tip:hover::after,.tip:focus::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:260px;background:var(--navy);color:#fff;font:400 .78rem/1.45 var(--f-body);font-style:normal;padding:7px 10px;border-radius:6px;z-index:50;text-align:left;white-space:normal;box-shadow:var(--shadow)}
+.statsbox{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.statsbox summary{cursor:pointer;font-weight:600;font-size:.9rem;color:var(--blue);list-style:none;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.statsbox summary::-webkit-details-marker{display:none}
+.statsbox summary::before{content:"▸";color:var(--blue)}
+.statsbox[open] summary::before{content:"▾"}
+.statsbox summary .note{font-weight:400}
+.statsbox-in{margin-top:8px}
+.navbox{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;padding:6px 8px;margin:6px 0 10px}
+.navbox > .lbl{white-space:nowrap}
+.nav-chips{margin-top:0;gap:4px;flex:1 1 auto}
+.nav-chip{padding:1px 8px;font-size:.8rem;border-radius:99px}
+.nav-chip .dot{width:7px;height:7px}
+.morebtn{border:1px dashed var(--line-2);background:var(--bg);border-radius:6px;padding:6px 12px;font-size:.86rem;color:var(--blue);cursor:pointer;align-self:end}
+.morebtn:hover{border-color:var(--blue)}
+.morefilt{display:flex;gap:8px 10px;flex-wrap:wrap;flex:1 1 100%}

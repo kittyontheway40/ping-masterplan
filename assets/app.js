@@ -268,11 +268,12 @@ function tableInner(key){
   <div class="tbl-wrap"><table><thead><tr><th>รหัส</th><th>ยศ.</th><th>แนวทาง/โครงการ</th><th>แผนงาน/มาตรการ</th>${opts.noBasin?'':'<th>ลุ่มน้ำสาขา</th>'}<th>จังหวัด</th><th>อำเภอ</th><th>ตำบล</th><th>กลุ่มพื้นที่</th></tr></thead><tbody>${rows}</tbody></table></div>
   ${list.length>n?`<div class="more"><button class="btn sm" data-act="more" data-key="${key}">แสดงเพิ่ม (เหลืออีก ${fmt(list.length-n)} รายการ)</button></div>`:''}`;
 }
+function stratProblems(tg){ const sc={1:0,2:0,3:0,4:0,5:0}; tg.forEach(t=>t.strat.forEach(n=>sc[n]++)); return `<div class="legend" style="font-size:.84rem">${[1,2,3,4,5].map(i=>`<span>${sPill(i)} ${esc(shortS(i))} <b class="num">${sc[i]}</b></span>`).join('')}</div>`; }
 function grpCounts(tams){
   const c = {}; tams.forEach(t=>t.grp.forEach(g=>c[g]=(c[g]||0)+1));
   const keys = Object.keys(c).sort((a,b)=>a[0]===b[0]? +a.slice(1)-+b.slice(1) : 'WPREG'.indexOf(a[0])-'WPREG'.indexOf(b[0]));
   if(!keys.length) return '<div class="note">ไม่มีตำบลที่จัดอยู่ในกลุ่มพื้นที่ปัญหา</div>';
-  return `<div class="grp-list">${keys.map(k=>`<span class="grp-item" title="${esc(M.groupFamilies[k[0]]||'')}"><b class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</b>${esc(M.groups[k]||'')}<span class="n">${c[k]}</span></span>`).join('')}</div><div class="note" style="margin-top:4px">ตัวเลข = จำนวนตำบล</div>`;
+  return `<div class="grp-list">${keys.map(k=>`<span class="grp-item" title="${esc(M.groupFamilies[k[0]]||'')}"><b class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</b>${esc(M.groups[k]||'')}<span class="n">${c[k]}</span></span>`).join('')}</div>`;
 }
 function tamInfo(t, compact){
   const sbs = `<b>${esc(sbMain(t))}</b>${t.sbPct[0]!=null?` <span class="note">(${t.sbPct[0]}% ของพื้นที่ตำบล)</span>`:''}` + (t.sb.length>1 ? `<div class="note">คาบเกี่ยว: ${t.sb.slice(1).map((b,i)=>esc(b)+(t.sbPct[i+1]!=null?` ${t.sbPct[i+1]}%`:'')).join(', ')}</div>` : '');
@@ -294,13 +295,15 @@ function renderHeader(){
   $('#authBtn').innerHTML = S.admin ? 'ผู้ดูแลระบบ · ออกจากระบบ' : (ss?.role==='user' ? 'ผู้ใช้ทั่วไป · เข้าสู่ระบบผู้ดูแล' : 'เข้าสู่ระบบ');
   const t = $('.tab[data-tab="admin"]'); t.innerHTML = `ผู้ดูแลระบบ${S.admin && SUBS.length ? `<span class="badge-n">${SUBS.length}</span>`:''}`;
 }
+const tip = t => `<button type="button" class="tip" aria-label="${esc(t)}" data-tip="${esc(t)}">i</button>`;
+function statsBox(inner){ return `<details class="statsbox" ${S.statsOpen?'open':''}><summary>ดูสถิติพื้นที่ <span class="note">สัดส่วนโครงการ · ยุทธศาสตร์ที่มีปัญหา · กลุ่มพื้นที่</span></summary><div class="statsbox-in">${inner}</div></details>`; }
 function renderKPIs(){
   const tg = M.tambons.filter(t=>t.target);
   const amp = new Set(M.tambons.map(t=>t.p+'|'+t.a)).size;
   const k = [
     [M.provinces.length,'จังหวัด'],[amp,'อำเภอ'],[M.tambons.filter(t=>t.geo).length,'ตำบลในลุ่มน้ำปิง'],[M.basins.length,'ลุ่มน้ำสาขา'],
     [tg.length,'ตำบลเป้าหมาย'],[P.length,'แนวทาง/โครงการ',true]];
-  $('#kpis').innerHTML = k.map(([v,l,p])=>`<div class="kpi"><div class="v ${p?'pinkv':''}">${fmt(v)}</div><div class="l">${l}</div></div>`).join('');
+  $('#kpis').innerHTML = `<span class="kl">ภาพรวมลุ่มน้ำปิง</span>` + k.map(([v,l,p])=>`<span class="ki"><b class="${p?'pinkv':''}">${fmt(v)}</b> ${l}</span>`).join('<span class="ksep">·</span>');
 }
 function renderFilters(){
   const f = S.f;
@@ -327,11 +330,11 @@ function renderFilters(){
   }
   $('#filters').innerHTML = loc + `
     <div class="fld search"><label for="fq">ค้นหา</label><input id="fq" type="search" placeholder="ชื่อโครงการ ตำบล อำเภอ ลุ่มน้ำ หรือรหัส" value="${esc(f.q)}"></div>
-    <div class="fld"><span class="lbl">ยุทธศาสตร์ <span class="hint">· กดเลือกได้มากกว่า 1 ยุทธศาสตร์</span></span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
+    <div class="fld"><span class="lbl">ยุทธศาสตร์</span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
+    ${S.tab==='map'?`<button type="button" class="morebtn" data-act="morefilt" aria-expanded="${!!S.moreOpen}">ตัวกรองโครงการเพิ่มเติม${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)?` <span class="badge-n">${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)}</span>`:''} <span aria-hidden="true">${S.moreOpen?'▴':'▾'}</span></button><div class="morefilt" ${S.moreOpen?'':'hidden'}>`:''}
     <div class="fld"><label for="fF">แผนงานหลัก</label><select id="fF"><option value="">ทั้งหมด</option>${Fopts.map(p=>`<option value="${p.code}" ${f.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`).join('')}</select></div>
     <div class="fld"><label for="fS">มาตรการ</label><select id="fS"><option value="">ทั้งหมด</option>${Sopts.map(m=>`<option value="${m.code}" ${f.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`).join('')}</select></div>
-    <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div>
-    <div class="fld"><label for="fR">แหล่งที่มา</label><select id="fR"><option value="">ทั้งหมด</option><option value="excel" ${f.src==='excel'?'selected':''}>จากแผนแม่บท</option><option value="new" ${f.src==='new'?'selected':''}>เพิ่มใหม่</option></select></div>
+    <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div>${S.tab==='map'?'</div>':''}
     <div class="fcount">${scopeCount()}</div>`;
 }
 function scopeCount(){
@@ -365,16 +368,16 @@ function renderArea(){
   let tree='', head='', crumbs = `<button data-act="goprov" data-v="">ทั้ง 6 จังหวัดในลุ่มน้ำปิง</button>`;
   if(!S.prov){
     head = 'จังหวัด';
-    tree = M.provinces.map(pv=>{ const ts=M.tambons.filter(t=>t.p===pv); return `<button class="nav-chip" data-act="goprov" data-v="${esc(pv)}">จ.${esc(pv)} <span class="ct">${ts.length} ต. · ${fmt(projIn(ts).length)}</span></button>`; }).join('');
+    tree = M.provinces.map(pv=>{ const ts=M.tambons.filter(t=>t.p===pv); return `<button class="nav-chip" data-act="goprov" data-v="${esc(pv)}">จ.${esc(pv)}</button>`; }).join('');
   } else if(!S.amp){
     head = `อำเภอใน จ.${S.prov}`;
     const amps = [...new Set(M.tambons.filter(t=>t.p===S.prov).map(t=>t.a))].sort((a,b)=>a.localeCompare(b,'th'));
-    tree = amps.map(a=>{ const ts=M.tambons.filter(t=>t.p===S.prov&&t.a===a); const tg=ts.filter(t=>t.target).length; return `<button class="nav-chip" data-act="goamp" data-v="${esc(a)}" title="${ts.length} ตำบล · เป้าหมาย ${tg} · ${fmt(projIn(ts).length)} โครงการ">อ.${esc(a)} <span class="ct">${ts.length} ต. · ${fmt(projIn(ts).length)}</span></button>`; }).join('');
+    tree = amps.map(a=>{ const ts=M.tambons.filter(t=>t.p===S.prov&&t.a===a); const tg=ts.filter(t=>t.target).length; return `<button class="nav-chip" data-act="goamp" data-v="${esc(a)}">อ.${esc(a)}</button>`; }).join('');
     crumbs += `<span class="sep">›</span><strong>จ.${esc(S.prov)}</strong>`;
   } else {
     head = `ตำบลใน อ.${S.amp}`;
     const ts = M.tambons.filter(t=>t.p===S.prov&&t.a===S.amp).sort((a,b)=>a.t.localeCompare(b.t,'th'));
-    tree = ts.map(t=>{ const n = projIn([t]).length; return `<button class="nav-chip" data-act="gotam" data-v="${t.id}" aria-current="${S.tam===t.id}" title="${t.target?'พื้นที่เป้าหมาย':'ไม่ใช่พื้นที่เป้าหมาย'}"><i class="dot" style="background:${t.target?'var(--blue)':'var(--p0)'}"></i>ต.${esc(t.t)} <span class="ct">${fmt(n)}</span></button>`; }).join('');
+    tree = ts.map(t=>{ const n = projIn([t]).length; return `<button class="nav-chip" data-act="gotam" data-v="${t.id}" aria-current="${S.tam===t.id}" title="${t.target?'พื้นที่เป้าหมาย':'ไม่ใช่พื้นที่เป้าหมาย'}"><i class="dot" style="background:${t.target?'var(--blue)':'var(--p0)'}"></i>ต.${esc(t.t)}</button>`; }).join('');
     crumbs += `<span class="sep">›</span><button data-act="goprov" data-v="${esc(S.prov)}">จ.${esc(S.prov)}</button><span class="sep">›</span>${S.tam?`<button data-act="goamp" data-v="${esc(S.amp)}">อ.${esc(S.amp)}</button><span class="sep">›</span><strong>ต.${esc(T[S.tam].t)}</strong>`:`<strong>อ.${esc(S.amp)}</strong>`}`;
   }
   // detail
@@ -392,7 +395,7 @@ function renderArea(){
     const ts = M.tambons.filter(t=>(!S.prov||t.p===S.prov)&&(!S.amp||t.a===S.amp));
     const tg = ts.filter(t=>t.target); const pj = projIn(ts);
     const lvl = S.amp ? `อ.${S.amp} จ.${S.prov}` : S.prov ? `จ.${S.prov}` : 'ทั้ง 6 จังหวัดในลุ่มน้ำปิง';
-    const sbs = [...new Set(ts.map(sbMain).filter(Boolean))];
+    const sbs = [...new Set(ts.flatMap(t=>t.sb))];
     detail = `<div class="info"><h2>${esc(lvl)}</h2><!--NAV-->
       <div class="sumgrid" style="margin-top:10px">
         <div class="stat"><div class="v">${fmt(ts.filter(t=>t.geo).length)}</div><div class="l">ตำบลในลุ่มน้ำปิง</div></div>
@@ -400,16 +403,14 @@ function renderArea(){
         <div class="stat"><div class="v">${fmt(sbs.length)}</div><div class="l">ลุ่มน้ำสาขาที่เกี่ยวข้อง</div></div>
         <div class="stat"><div class="v" style="color:var(--pink)">${fmt(pj.length)}</div><div class="l">โครงการที่ลงตำบล${filterActive()?' (ตามตัวกรอง)':''}</div></div>
       </div>
-      <div class="lbl">สัดส่วนโครงการรายยุทธศาสตร์</div>${stratBar(pj)}
-      <div class="lbl" style="margin-top:14px">กลุ่มพื้นที่ที่พบ</div>${grpCounts(tg)}
+      ${statsBox(`<div class="lbl">สัดส่วนโครงการรายยุทธศาสตร์</div>${stratBar(pj)}
+        <div class="lbl" style="margin-top:12px">ยุทธศาสตร์ที่มีปัญหา (จำนวนตำบลเป้าหมาย)</div>${stratProblems(tg)}
+        <div class="lbl" style="margin-top:12px">กลุ่มพื้นที่ที่พบ ${tip('ตัวเลขในวง = จำนวนตำบลเป้าหมายที่อยู่ในกลุ่มพื้นที่นั้น')}</div>${grpCounts(tg)}`)}
     </div>
-    <div class="sec-h"><h3>โครงการในพื้นที่ (${fmt(pj.length)})</h3><span class="note">เฉพาะโครงการที่ระบุตำบลเป้าหมาย</span></div>
+    <div class="sec-h"><h3>โครงการในพื้นที่ (${fmt(pj.length)}) ${tip('นับเฉพาะโครงการที่ระบุตำบลเป้าหมายในพื้นที่นี้ · โครงการเดียวอาจลงหลายตำบล จึงนับครั้งเดียว')}</h3></div>
     ${projTable('area', pj, {name: lvl})}`;
   }
-  const navTs = M.tambons.filter(t=>(!S.prov||t.p===S.prov)&&(!S.amp||t.a===S.amp));
-  const navSum = projIn(navTs).length;
-  const navNote = `<div class="note nav-note">โครงการเดียวอาจลงหลายพื้นที่ จึงถูกนับในทุกพื้นที่ที่ลง ผลรวมตัวเลขในปุ่มจึงอาจมากกว่ายอดรวม · ยอดรวมไม่นับซ้ำ <b class="num">${fmt(navSum)}</b> โครงการ</div>`;
-  const nav = `<div class="navbox"><div class="navbox-h"><span class="lbl">${esc(head)} · กดเพื่อดูลึกลงไป · ตัวเลข = ${S.amp?'จำนวนโครงการ':'ตำบล · โครงการ'}</span>${S.prov?`<button class="linkbtn" data-act="up">ย้อนกลับ</button>`:''}</div><div class="nav-chips">${tree}</div>${navNote}${S.amp?`<div class="legend"><span><i class="dot" style="background:var(--blue)"></i>พื้นที่เป้าหมาย</span><span><i class="dot" style="background:var(--p0)"></i>ไม่ใช่เป้าหมาย</span></div>`:''}</div>`;
+  const nav = `<div class="navbox"><span class="lbl">${esc(head)}${S.amp?' '+tip('จุดสีน้ำเงิน = ตำบลพื้นที่เป้าหมาย · จุดสีเทา = ไม่ใช่พื้นที่เป้าหมาย'):''}</span><div class="nav-chips">${tree}</div>${S.prov?`<button class="linkbtn" data-act="up">ย้อนกลับ</button>`:''}</div>`;
   el.innerHTML = `<div class="crumbs">${crumbs}</div>${detail.replace('<!--NAV-->', nav)}`;
 }
 
@@ -440,9 +441,9 @@ function renderBasin(){
       <div class="stat"><div class="v">${tg.length}</div><div class="l">ตำบลเป้าหมาย</div></div>
       <div class="stat"><div class="v" style="color:var(--pink)">${fmt(pj.length)}</div><div class="l">แนวทาง/โครงการ${filterActive()?' (ตามตัวกรอง)':''}</div></div>
     </div>
-    <div class="lbl">ยุทธศาสตร์ที่มีปัญหา (จำนวนตำบลเป้าหมาย)</div>
-    <div class="legend" style="font-size:.85rem">${[1,2,3,4,5].map(i=>`<span>${sPill(i)} ${esc(shortS(i))} <b class="num">${sc[i]}</b></span>`).join('')}</div>
-    <div class="lbl" style="margin-top:14px">กลุ่มพื้นที่ในลุ่มน้ำนี้</div>${grpCounts(tg)}
+    ${statsBox(`<div class="lbl">สัดส่วนโครงการรายยุทธศาสตร์</div>${stratBar(pj)}
+      <div class="lbl" style="margin-top:12px">ยุทธศาสตร์ที่มีปัญหา (จำนวนตำบลเป้าหมาย)</div>${stratProblems(tg)}
+      <div class="lbl" style="margin-top:12px">กลุ่มพื้นที่ในลุ่มน้ำนี้ ${tip('ตัวเลขในวง = จำนวนตำบลเป้าหมายที่อยู่ในกลุ่มพื้นที่นั้น')}</div>${grpCounts(tg)}`)}
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="mapbasin" data-v="${esc(b.name)}">ดูบนแผนที่</button><button class="btn sm pink" data-act="newproj" data-sb="${esc(b.name)}">+ เสนอโครงการในลุ่มน้ำนี้</button></div>
   </div>
   ${Object.values(b.keyF||{}).some(Boolean)?`<div class="keyf-box"><div class="keyf-h"><span class="lbl">แนวทางสำคัญรายแผนงาน (สรุปจากแผนแม่บท) · กดหรือชี้ที่แผนงานเพื่อดูรายละเอียด</span></div>
@@ -906,6 +907,7 @@ function bind(){
         if(showing){ pnl.hidden=true; pnl.dataset.all=''; a.textContent='แสดงทั้งหมด'; break; }
         pnl.innerHTML = `<div class="keyf">${$('#keyfData').innerHTML}</div>`; pnl.dataset.all='1'; pnl.hidden=false; a.textContent='ซ่อน'; break; }
       case 'mkind': if(MS.kind!==v){ MS.prov=''; MS.amp=''; MS.tam=''; mapSel=null; } MS.kind=v; $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===v)); afterScope(); break;
+      case 'morefilt': S.moreOpen=!S.moreOpen; renderFilters(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }
       case 'fs': { const n=+a.dataset.n; S.f.s.has(n)?S.f.s.delete(n):S.f.s.add(n); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break; }
@@ -933,6 +935,7 @@ function bind(){
       case 'demoresetok': ['ping_overrides','ping_subs','ping_audit'].forEach(k=>{ try{localStorage.removeItem(k);}catch(e){} }); Store.initDemo(); toast('ล้างข้อมูลทดลองแล้ว'); break;
     }
   });
+  document.addEventListener('toggle', e=>{ if(e.target.classList && e.target.classList.contains('statsbox')) S.statsOpen = e.target.open; }, true);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#modalBg')?.dataset.locked) closeModal(); });
   $$('.tab').forEach(b=>b.onclick = ()=>setTab(b.dataset.tab));
   $('#newBtn').onclick = ()=>openForm('new');
@@ -950,7 +953,7 @@ function bind(){
     if(id==='fBp'){ S.bprov=e.target.value||null; S.bamp=S.btam=null; }
     if(id==='fBa'){ S.bamp=e.target.value||null; S.btam=null; }
     if(id==='fBt'){ S.btam=e.target.value||null; }
-    if(id==='fF'){ S.f.F=e.target.value; S.f.S=''; } if(id==='fS') S.f.S=e.target.value; if(id==='fG') S.f.grp=e.target.value; if(id==='fR') S.f.src=e.target.value;
+    if(id==='fF'){ S.f.F=e.target.value; S.f.S=''; } if(id==='fS') S.f.S=e.target.value; if(id==='fG') S.f.grp=e.target.value;
     renderFilters(); renderView();
   });
 }
