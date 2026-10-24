@@ -354,3 +354,4 @@ td.grp{min-width:130px}
 .clr:hover{text-decoration:underline}
 .fld.has-clr > label,.fld.has-clr > .lbl{padding-right:44px}
 .fld.has-clr select,.fld.has-clr input{border-color:var(--blue)}
+.lyrfld .chips{gap:4px}.lyrfld .chip{padding:5px 10px}

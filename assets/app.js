@@ -478,7 +478,8 @@ function renderBasin(){
 /* ================= VIEW: MAP ================= */
 let MAP=null, L_T=null, L_SB=null, L_PV=null, L_AM=null, L_RV=null, L_HS=null, L_BASE=null, L_LBL=null, GEO={};
 let mapMode='target', mapStrat='all', L_PIE=null, mapSel=null, mapOp=.55, MF={active:false,cnt:{}};
-const MS = {kind:'basin', basin:'', prov:'', amp:'', tam:''};
+const MS = {kind:'basin', basin:'', prov:'', amp:'', tam:'', lyr:{pv:false, am:false, tam:false}};
+let L_PV2=null, L_AM2=null, L_TO=null;
 const RIVER='#2a7fd4';
 async function loadGeo(){
   if(GEO.t) return;
@@ -540,7 +541,11 @@ function scopeBounds(){
   if(!lyr.length) return null;
   return L.featureGroup(lyr).getBounds();
 }
-function fitScope(){ const b = scopeBounds(); if(b && b.isValid()) MAP.fitBounds(b, {padding:[20,20], maxZoom:11}); }
+function fitScope(){
+  let b = scopeBounds();
+  if((!b || !b.isValid()) && MS.kind==='basin' && MS.basin){ const l = L_SB.getLayers().find(x=>x.feature.properties.name===MS.basin); if(l) b = l.getBounds(); }
+  if(b && b.isValid()) MAP.fitBounds(b, {padding:[20,20], maxZoom:11});
+}
 function mapLabels(){
   if(L_LBL) L_LBL.remove();
   L_LBL = L.layerGroup();
@@ -562,6 +567,9 @@ function mapBoundaryLayers(){
   L_SB.setStyle(f=>{ const hide = MS.basin && MS.basin!==f.properties.name; return {color:'#1d3766', weight: MS.basin?3:1.6, opacity: hide?0:1, fill:false}; });
   L_AM.setStyle(f=>{ const [p,a]=f.properties.key.split('|'); const hide = (MS.prov && MS.prov!==p) || (MS.amp && MS.amp!==a); return {color:'#1d3766', weight: MS.amp===a?3:.9, opacity: hide?0:.8, fill:false}; });
   L_PV.setStyle(f=>{ const hide = MS.prov && MS.prov!==f.properties.name; return {color:'#1d3766', weight: MS.prov?3:2, opacity: hide?0:1, dashArray:'6 4', fill:false}; });
+  // ชั้นขอบเขตการปกครองเสริม (เปิด/ปิดได้ในโหมดลุ่มน้ำสาขา)
+  const lyrs = [[L_TO,'tam'],[L_AM2,'am'],[L_PV2,'pv']];
+  lyrs.forEach(([l,k])=>{ if(!l) return; (basin && MS.lyr[k]) ? l.addTo(MAP) : l.remove(); });
   L_RV.bringToFront();
 }
 function scopeTools(){
@@ -570,8 +578,12 @@ function scopeTools(){
   const amps = MS.prov ? [...new Set(pool.filter(t=>t.p===MS.prov).map(t=>t.a))].sort((a,b)=>a.localeCompare(b,'th')) : [];
   const tams = MS.amp ? pool.filter(t=>t.p===MS.prov&&t.a===MS.amp).sort((a,b)=>a.t.localeCompare(b.t,'th')) : [];
   const inB = MS.kind==='basin' && MS.basin;
+  const lyrSel = MS.kind==='basin' ? `<div class="fld lyrfld"><span class="lbl">แสดงขอบเขตการปกครอง</span><div class="chips">
+      <label class="chip"><input type="checkbox" data-lyr="pv" ${MS.lyr.pv?'checked':''}> จังหวัด</label>
+      <label class="chip"><input type="checkbox" data-lyr="am" ${MS.lyr.am?'checked':''}> อำเภอ</label>
+      <label class="chip"><input type="checkbox" data-lyr="tam" ${MS.lyr.tam?'checked':''}> ตำบล</label></div></div>` : '';
   const basinSel = MS.kind==='basin' ? `<div class="fld"><label for="msBasin">ลุ่มน้ำสาขา</label><select id="msBasin"><option value="">ทั้ง 30 ลุ่มน้ำสาขา</option>${M.basins.map(b=>`<option ${MS.basin===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>` : '';
-  return basinSel + `<div class="fld"><label for="msProv">จังหวัด${inB?' (ในลุ่มน้ำนี้)':''}</label><select id="msProv"><option value="">${inB?`ทุกจังหวัดในลุ่มน้ำนี้ (${provs.length})`:'ทั้ง 6 จังหวัดในลุ่มน้ำปิง'}</option>${provs.map(p=>`<option ${MS.prov===p?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+  return basinSel + lyrSel + `<div class="fld"><label for="msProv">จังหวัด${inB?' (ในลุ่มน้ำนี้)':''}</label><select id="msProv"><option value="">${inB?`ทุกจังหวัดในลุ่มน้ำนี้ (${provs.length})`:'ทั้ง 6 จังหวัดในลุ่มน้ำปิง'}</option>${provs.map(p=>`<option ${MS.prov===p?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
   <div class="fld"><label for="msAmp">อำเภอ</label><select id="msAmp" ${MS.prov?'':'disabled'}><option value="">${MS.prov?'ทุกอำเภอ':'เลือกจังหวัดก่อน'}</option>${amps.map(a=>`<option ${MS.amp===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
   <div class="fld"><label for="msTam">ตำบล</label><select id="msTam" ${MS.amp?'':'disabled'}><option value="">${MS.amp?'ทุกตำบล':'เลือกอำเภอก่อน'}</option>${tams.map(t=>`<option value="${t.id}" ${MS.tam===t.id?'selected':''}>${esc(t.t)}${t.target?' (เป้าหมาย)':''}</option>`).join('')}</select></div>`;
 }
@@ -581,6 +593,7 @@ function bindScope(){
   on('msProv', v=>{ MS.prov=v; MS.amp=''; MS.tam=''; mapSel=null; });
   on('msAmp', v=>{ MS.amp=v; MS.tam=''; mapSel=null; });
   on('msTam', v=>{ MS.tam=v; if(!v) mapSel=null; });
+  $$('#mScope [data-lyr]').forEach(cb=>cb.onchange = ()=>{ MS.lyr[cb.dataset.lyr] = cb.checked; mapBoundaryLayers(); mapLegend(); });
 }
 function afterScope(){
   $('#mScope').innerHTML = scopeTools(); bindScope(); addClearButtons($('#mScope'));
@@ -621,6 +634,9 @@ async function renderMap(){
     L_PV = L.geoJSON(GEO.pv, {interactive:false});
     L_AM = L.geoJSON(GEO.am, {interactive:false});
     L_SB = L.geoJSON(GEO.sb, {interactive:false});
+    L_TO = L.geoJSON(GEO.t, {interactive:false, style:{color:'#5a6880', weight:.7, opacity:.85, fill:false}});
+    L_AM2 = L.geoJSON(GEO.am, {interactive:false, style:{color:'#7656a8', weight:1.4, opacity:.9, dashArray:'4 3', fill:false}});
+    L_PV2 = L.geoJSON(GEO.pv, {interactive:false, style:{color:'#c04a80', weight:2.4, opacity:.95, dashArray:'8 5', fill:false}});
     L_RV = L.geoJSON(GEO.rv, {style:{color:RIVER, weight:2.2, opacity:.95}, interactive:false}).addTo(MAP);
     $('#mMode').onchange = e=>{ mapMode=e.target.value; $('#mStratWrap').hidden = mapMode!=='strat'; restyle(); mapLegend(); };
     $('#mStrat').onchange = e=>{ mapStrat=e.target.value; restyle(); mapLegend(); };
@@ -667,6 +683,7 @@ function mapLegend(){
   if(mapMode==='count') h = [['#ffffff','0'],['#c6d7ee','1–3'],['#8fb0dd','4–6'],['#4f7fc2','7–10'],['#2c5ea5','11–15'],['#1d3766','มากกว่า 15']].map(([c,l])=>`<span><i style="background:${c}"></i>${l} โครงการ</span>`).join('');
   if(mapMode==='strat' && mapStrat==='all') h = M.strategies.map(st=>`<span><i style="background:${SHEX[st.n]};border-radius:50%"></i>ยศ.${st.n} ${esc(st.short)}</span>`).join('') + `<span class="note">วงกลมในตำบลแบ่งสีตามยุทธศาสตร์ที่มีปัญหา · พื้นตำบลยิ่งเข้มยิ่งมีปัญหาหลายด้าน</span>`;
   else if(mapMode==='strat') h = `<span><i style="background:${SHEX[mapStrat]}"></i>มีปัญหาด้าน${esc(STRAT[mapStrat].short)}</span><span><i style="background:#ffffff"></i>ไม่พบปัญหาด้านนี้</span>`;
+  if(MS.kind==='basin'){ if(MS.lyr.pv) h += `<span><i style="background:transparent;border:2px dashed #c04a80"></i>ขอบเขตจังหวัด</span>`; if(MS.lyr.am) h += `<span><i style="background:transparent;border:1.5px dashed #7656a8"></i>ขอบเขตอำเภอ</span>`; if(MS.lyr.tam) h += `<span><i style="background:transparent;border:1px solid #5a6880"></i>ขอบเขตตำบล</span>`; }
   h += `<span><i style="background:${RIVER};height:3px;border:0"></i>แม่น้ำปิงและลำน้ำสายหลัก</span><span><i style="background:transparent;border:2px solid #1d3766"></i>${MS.kind==='basin'?'ขอบเขตลุ่มน้ำสาขา':'ขอบเขตจังหวัด/อำเภอ'}</span>`;
   const n = M.tambons.filter(t=>t.geo && inScope(t) && tamMatch(t)).length;
   const fl = filt(P);
