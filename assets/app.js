@@ -297,6 +297,20 @@ function renderHeader(){
 }
 const tip = t => `<button type="button" class="tip" aria-label="${esc(t)}" data-tip="${esc(t)}">i</button>`;
 function statsBox(inner){ return `<details class="statsbox" ${S.statsOpen?'open':''}><summary>ดูสถิติพื้นที่ <span class="note">สัดส่วนโครงการ · ยุทธศาสตร์ที่มีปัญหา · กลุ่มพื้นที่</span></summary><div class="statsbox-in">${inner}</div></details>`; }
+/* ปุ่ม "ล้าง" ในแต่ละช่องตัวกรอง */
+function addClearButtons(root){
+  if(!root) return;
+  root.querySelectorAll('.fld').forEach(fld=>{
+    fld.querySelector(':scope > .clr')?.remove();
+    const ctl = fld.querySelector('select, input[type=search]');
+    let on = false, target = '';
+    if(ctl){ on = !ctl.disabled && ctl.value !== '' && !(ctl.tagName==='SELECT' && ctl.selectedIndex===0 && ctl.options[0]?.value!==''); target = ctl.id; }
+    else if(fld.querySelector('[data-act="fs"]')){ on = S.f.s.size>0; target = '__strat'; }
+    if(!on || !target) return;
+    const b = document.createElement('button'); b.type='button'; b.className='clr'; b.dataset.act='clr'; b.dataset.v=target; b.title='ล้างตัวกรองนี้'; b.innerHTML='× ล้าง';
+    fld.classList.add('has-clr'); fld.appendChild(b);
+  });
+}
 function renderKPIs(){
   const tg = M.tambons.filter(t=>t.target);
   const amp = new Set(M.tambons.map(t=>t.p+'|'+t.a)).size;
@@ -336,6 +350,7 @@ function renderFilters(){
     <div class="fld"><label for="fS">มาตรการ</label><select id="fS"><option value="">ทั้งหมด</option>${Sopts.map(m=>`<option value="${m.code}" ${f.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`).join('')}</select></div>
     <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div></div>
 `;
+  addClearButtons($('#filters'));
 }
 function scopeCount(){
   let base = P, label = '';
@@ -564,7 +579,7 @@ function bindScope(){
   on('msTam', v=>{ MS.tam=v; if(!v) mapSel=null; });
 }
 function afterScope(){
-  $('#mScope').innerHTML = scopeTools(); bindScope();
+  $('#mScope').innerHTML = scopeTools(); bindScope(); addClearButtons($('#mScope'));
   if(MS.kind!=='admin' || !MS.tam){ if(mapSel && !inScope(T[mapSel])) mapSel=null; }
   mapBoundaryLayers(); restyle(); mapLabels(); fitScope(); mapLegend(); mapProjects();
   if(L_HS) L_HS.setOpacity((MS.basin && MS.kind==='basin') || MS.prov ? .5 : 1);
@@ -907,6 +922,12 @@ function bind(){
         if(showing){ pnl.hidden=true; pnl.dataset.all=''; a.textContent='แสดงทั้งหมด'; break; }
         pnl.innerHTML = `<div class="keyf">${$('#keyfData').innerHTML}</div>`; pnl.dataset.all='1'; pnl.hidden=false; a.textContent='ซ่อน'; break; }
       case 'mkind': if(MS.kind!==v){ MS.prov=''; MS.amp=''; MS.tam=''; mapSel=null; } MS.kind=v; $$('.seg-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===v)); afterScope(); break;
+      case 'clr': { if(v==='__strat'){ S.f.s.clear(); renderFilters(); renderView(); break; }
+        const el2 = document.getElementById(v); if(!el2) break;
+        el2.value = '';
+        if(el2.tagName==='INPUT'){ S.f.q=''; renderFilters(); renderView(); }
+        else el2.dispatchEvent(new Event('change', {bubbles:true}));
+        break; }
       case 'morefilt': S.moreOpen=!S.moreOpen; renderFilters(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }

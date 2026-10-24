@@ -348,3 +348,9 @@ td.grp{min-width:130px}
 .morebar .fcount{margin-left:auto;text-align:right;white-space:nowrap}
 @media (max-width:520px){.morebar{flex-wrap:wrap;padding:0 10px 6px 0}.morebar .fcount{white-space:normal;padding-left:12px}}
 .morefilt{display:flex;gap:8px 10px;flex-wrap:wrap;flex:1 1 100%}
+
+.fld.has-clr{position:relative}
+.clr{position:absolute;top:-1px;right:0;border:0;background:none;color:var(--pink);font-size:.72rem;cursor:pointer;padding:0 2px;line-height:1.4}
+.clr:hover{text-decoration:underline}
+.fld.has-clr > label,.fld.has-clr > .lbl{padding-right:44px}
+.fld.has-clr select,.fld.has-clr input{border-color:var(--blue)}
