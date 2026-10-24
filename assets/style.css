@@ -355,3 +355,15 @@ td.grp{min-width:130px}
 .fld.has-clr > label,.fld.has-clr > .lbl{padding-right:44px}
 .fld.has-clr select,.fld.has-clr input{border-color:var(--blue)}
 .lyrfld .chips{gap:4px}.lyrfld .chip{padding:5px 10px}
+.locrow .tracker{margin-left:auto;flex:1 1 360px;max-width:560px;min-width:0}
+.locrow.trk-only .tracker{margin-left:0;max-width:none}
+.tracker{display:flex;flex-direction:column;gap:4px}
+.trk-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.trk-bar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--surface-2)}
+.trk-bar span{display:block;height:100%}
+.trk-items{display:flex;flex-wrap:wrap;gap:4px 10px}
+.trk-i{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;background:none;border-radius:99px;padding:1px 6px;font-size:.78rem;color:var(--fg);cursor:pointer}
+.trk-i:hover{border-color:var(--line-2)}
+.trk-i[aria-pressed="true"]{border-color:var(--blue);background:var(--bg);font-weight:600}
+.trk-i i{width:9px;height:9px;border-radius:50%;display:inline-block}
+@media (max-width:620px){.locrow .tracker{flex-basis:100%;max-width:none;margin-left:0}}

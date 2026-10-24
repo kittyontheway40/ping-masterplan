@@ -3,7 +3,10 @@
 'use strict';
 const CFG = window.APP_CONFIG || {firebase:{}};
 const DATA = (window.DATA_BASE || 'data/');
-const STATUS_OPTS = ['แนวคิดโครงการ','ศึกษาความเหมาะสม','สำรวจออกแบบ','เสนอของบประมาณ','ได้รับงบประมาณ','อยู่ระหว่างดำเนินการ','ดำเนินการแล้วเสร็จ'];
+const STATUS_OPTS = ['เตรียมการ','กำลังดำเนินการ','แล้วเสร็จ'];
+const STAGES = [['เตรียมการ','#e2963a'],['กำลังดำเนินการ','#2c5ea5'],['แล้วเสร็จ','#2f8a54'],['ยังไม่ระบุ','#c3cbd8']];
+const LEGACY = {'แนวคิดโครงการ':'เตรียมการ','ศึกษาความเหมาะสม':'เตรียมการ','สำรวจออกแบบ':'เตรียมการ','เสนอของบประมาณ':'เตรียมการ','ได้รับงบประมาณ':'เตรียมการ','อยู่ระหว่างดำเนินการ':'กำลังดำเนินการ','ดำเนินการแล้วเสร็จ':'แล้วเสร็จ'};
+const stageOf = p => { const v = LEGACY[p.status] || p.status; return STATUS_OPTS.includes(v) ? v : 'ยังไม่ระบุ'; };
 const SCOL = {1:'var(--s1)',2:'var(--s2)',3:'var(--s3)',4:'var(--s4)',5:'var(--s5)'};
 const SHEX = {1:'#2f7fc1',2:'#4c9a56',3:'#d0862a',4:'#23938a',5:'#7656a8'};
 const TGHEX = '#e07b39';
@@ -13,7 +16,7 @@ let M, T = {}, P = [], SEED = [], SUBS = [], AUDIT = [];
 let IDX = {byTam:{}, byBasin:{}}, MEAS = {}, PROG = {}, STRAT = {}, BAS = {};
 const S = {
   tab:'area', prov:null, amp:null, tam:null, basin:null,
-  f:{q:'', s:new Set(), F:'', S:'', grp:'', src:''},
+  f:{q:'', s:new Set(), F:'', S:'', grp:'', src:'', stage:''},
   admin:false, user:null, seedFallback:false
 };
 const $ = (s, el=document) => el.querySelector(s);
@@ -194,8 +197,9 @@ function projGroups(p){
   return g;
 }
 function matchGrp(codes, sel){ if(!sel) return true; for(const c of codes){ if(sel.length===1 ? c[0]===sel : c===sel) return true; } return false; }
-function projMatch(p){
+function projMatch(p, ignoreStage){
   const f = S.f;
+  if(f.stage && !ignoreStage && stageOf(p)!==f.stage) return false;
   if(f.s.size && !f.s.has(p.s)) return false;
   if(f.F && !String(p.F).split(/,\s*/).includes(f.F)) return false;
   if(f.S && p.S!==f.S) return false;
@@ -212,8 +216,8 @@ function projMatch(p){
   }
   return true;
 }
-const filt = list => list.filter(projMatch);
-function filterActive(){ const f=S.f; return !!(f.q||f.s.size||f.F||f.S||f.grp||f.src); }
+const filt = list => list.filter(p=>projMatch(p));
+function filterActive(){ const f=S.f; return !!(f.q||f.s.size||f.F||f.S||f.grp||f.src||f.stage); }
 
 /* ================= COMPONENTS ================= */
 const sPill = n => `<span class="pill s" style="background:${SCOL[n]}" title="${esc(STRAT[n]?.short)}">ยศ.${n}</span>`;
@@ -256,7 +260,7 @@ function tableInner(key){
     return `<tr class="row" data-pid="${esc(p.id)}">
       <td class="num sub">${esc(p.id)}</td>
       <td>${sPill(p.s)}</td>
-      <td class="t">${esc(p.title)}${p.src==='new'?' <span class="pill new">เพิ่มใหม่</span>':''}${p.status?`<div class="sub">${esc(p.status)}</div>`:''}</td>
+      <td class="t">${esc(p.title)}${p.src==='new'?' <span class="pill new">เพิ่มใหม่</span>':''}${stageOf(p)!=='ยังไม่ระบุ'?`<div class="sub"><i class="dot" style="background:${STAGES.find(x=>x[0]===stageOf(p))[1]};width:7px;height:7px"></i> ${esc(stageOf(p))}</div>`:''}</td>
       <td><span class="pill code">${esc(p.F)}</span> <span class="pill code">${esc(p.S)}</span></td>
       ${opts.noBasin?'':`<td class="b">${esc(p.sb)}</td>`}
       <td class="loc">${L.ts.length?shortList(L.prov,'จ.'):basinLvl}</td>
@@ -342,6 +346,8 @@ function renderFilters(){
       <div class="fld"><label for="fBa">อำเภอ</label><select id="fBa" ${S.bprov?'':'disabled'}><option value="">${S.bprov?'ทุกอำเภอ':'เลือกจังหวัดก่อน'}</option>${amps.map(a=>`<option ${S.bamp===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
       <div class="fld"><label for="fBt">ตำบล</label><select id="fBt" ${S.bamp?'':'disabled'}><option value="">${S.bamp?'ทุกตำบล':'เลือกอำเภอก่อน'}</option>${tams.map(t=>`<option value="${t.id}" ${S.btam===t.id?'selected':''}>${esc(t.t)}${t.target?' (เป้าหมาย)':''}</option>`).join('')}</select></div></div>`;
   }
+  if(S.tab==='area' || S.tab==='basin') loc = loc.replace(/<\/div>\s*$/, tracker()+'</div>');
+  else if(S.tab==='map') loc = `<div class="locrow trk-only">${tracker()}</div>`;
   $('#filters').innerHTML = loc + `
     <div class="fld search"><label for="fq">ค้นหา</label><input id="fq" type="search" placeholder="ชื่อโครงการ ตำบล อำเภอ ลุ่มน้ำ หรือรหัส" value="${esc(f.q)}"></div>
     <div class="fld"><span class="lbl">ยุทธศาสตร์</span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
@@ -352,7 +358,7 @@ function renderFilters(){
 `;
   addClearButtons($('#filters'));
 }
-function scopeCount(){
+function scopeBase(){
   let base = P, label = '';
   if(S.tab==='area' && S.prov){
     const ids = new Set(M.tambons.filter(t=>t.p===S.prov && (!S.amp||t.a===S.amp) && (!S.tam||t.id===S.tam)).map(t=>t.id));
@@ -370,11 +376,24 @@ function scopeCount(){
       label += ' · ' + (S.btam ? 'ต.'+T[S.btam].t : S.bamp ? 'อ.'+S.bamp : 'จ.'+S.bprov);
     }
   }
+  return {base, label};
+}
+function scopeCount(){
+  const {base, label} = scopeBase();
   const n = filt(base).length;
   const where = label ? ` ใน${esc(label)}` : '';
   return filterActive()
     ? `พบ <b class="num">${fmt(n)}</b> จาก ${fmt(base.length)} โครงการ${where} · <button class="linkbtn" data-act="clear">ล้างตัวกรอง</button>`
     : `${fmt(base.length)} โครงการ${where}`;
+}
+function tracker(){
+  const {base} = scopeBase();
+  const list = base.filter(p=>projMatch(p, true));
+  const c = {}; STAGES.forEach(([k])=>c[k]=0); list.forEach(p=>c[stageOf(p)]++);
+  const n = list.length || 1;
+  const bar = STAGES.map(([k,col])=>c[k]?`<span style="width:${c[k]/n*100}%;background:${col}" title="${k} ${c[k]}"></span>`:'').join('');
+  const items = STAGES.map(([k,col])=>`<button type="button" class="trk-i" data-act="stage" data-v="${k}" aria-pressed="${S.f.stage===k}"><i style="background:${col}"></i>${k} <b class="num">${fmt(c[k])}</b></button>`).join('');
+  return `<div class="tracker"><div class="trk-h"><span class="lbl">ติดตามสถานะโครงการ ${tip('นับตามพื้นที่และตัวกรองที่เลือก · กดที่สถานะเพื่อกรองเฉพาะสถานะนั้น · ผู้ดูแลปรับสถานะได้ที่ปุ่ม "แก้ไขข้อมูล" ในรายละเอียดโครงการ')}</span>${S.f.stage?'<button type="button" class="linkbtn" data-act="stage" data-v="">ดูทุกสถานะ</button>':''}</div><div class="trk-bar">${bar}</div><div class="trk-items">${items}</div></div>`;
 }
 function shortS(n){ return ({1:'อุปโภคบริโภค',2:'ภาคการผลิต',3:'ท่วม–แล้ง',4:'ระบบนิเวศ',5:'บริหารจัดการ'})[n]; }
 
@@ -774,7 +793,7 @@ function openProject(id){
       <dt>หน่วยงานรับผิดชอบ</dt><dd>${esc(p.agency)||'–'}</dd>
       <dt>งบประมาณ</dt><dd class="num">${p.budget!=null&&p.budget!==''?fmt(p.budget)+' ล้านบาท':'–'}</dd>
       <dt>ระยะเวลา</dt><dd class="num">${p.yearStart||p.yearEnd?`พ.ศ. ${esc(p.yearStart||'?')} – ${esc(p.yearEnd||'?')}`:'–'}</dd>
-      <dt>สถานะ</dt><dd>${esc(p.status)||'–'}</dd>
+      <dt>สถานะ</dt><dd>${stageOf(p)==='ยังไม่ระบุ'?'<span class="note">ยังไม่ระบุ</span>':esc(stageOf(p))}</dd>
       ${p.note?`<dt>หมายเหตุ</dt><dd>${esc(p.note)}</dd>`:''}
       ${p.proposer?`<dt>ผู้เสนอ</dt><dd>${esc(p.proposer)} · ${esc(p.proposerOrg)}</dd>`:''}
       ${p.updatedBy?`<dt>แก้ไขล่าสุด</dt><dd class="note">${esc(p.updatedBy)} · ${new Date(p.updatedAt).toLocaleString('th-TH')}</dd>`:''}
@@ -812,7 +831,7 @@ function openForm(mode, data={}, sub=null){
       <div class="fld"><label for="ff_budget">งบประมาณ (ล้านบาท)</label><input id="ff_budget" type="number" min="0" step="0.01" value="${esc(d.budget??'')}"></div>
       <div class="fld"><label for="ff_yearStart">ปีเริ่ม (พ.ศ.)</label><input id="ff_yearStart" type="number" min="2560" max="2600" value="${esc(d.yearStart??'')}"></div>
       <div class="fld"><label for="ff_yearEnd">ปีสิ้นสุด (พ.ศ.)</label><input id="ff_yearEnd" type="number" min="2560" max="2600" value="${esc(d.yearEnd??'')}"></div>
-      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${d.status===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${(LEGACY[d.status]||d.status)===o?'selected':''}>${o}</option>`).join('')}</select></div>
       <div class="fld"><label for="ff_ref">ตารางอ้างอิง</label><input id="ff_ref" value="${esc(d.ref)}" placeholder="เช่น 13-11"></div>
       <div class="fld full"><label for="ff_note">หมายเหตุ</label><input id="ff_note" value="${esc(d.note)}"></div>
     </div>
@@ -820,8 +839,12 @@ function openForm(mode, data={}, sub=null){
   </form>
   <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn ${mode==='new'?'pink':'primary'}" id="ff_save">${mode==='new'?'ส่งให้ผู้ดูแลพิจารณา':mode==='edit'?'บันทึกการแก้ไข':'อนุมัติและบันทึกลงระบบ'}</button></div>`);
   let picked = new Set(d.tambons||[]);
-  const fillF = ()=>{ const s=+$('#ff_s').value; const opts=M.programmes.filter(p=>p.s===s); $('#ff_F').innerHTML = `<option value="">เลือก</option>`+opts.map(p=>`<option value="${p.code}" ${d.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`).join(''); fillS(); };
-  const fillS = ()=>{ const s=+$('#ff_s').value, F=$('#ff_F').value; const opts=M.measures.filter(m=>m.s===s && (!F||m.F.includes(F))); $('#ff_S').innerHTML = `<option value="">เลือก</option>`+opts.map(m=>`<option value="${m.code}" ${d.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`).join(''); descS(); };
+  const optF = p=>`<option value="${p.code}" ${d.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`;
+  const optS = m=>`<option value="${m.code}" ${d.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`;
+  const fillF = ()=>{ const s=+$('#ff_s').value; const rec=M.programmes.filter(p=>p.s===s), oth=M.programmes.filter(p=>p.s!==s);
+    $('#ff_F').innerHTML = `<option value="">เลือก</option>${s?`<optgroup label="แผนงานของยุทธศาสตร์ที่ ${s}">${rec.map(optF).join('')}</optgroup><optgroup label="แผนงานอื่น">${oth.map(optF).join('')}</optgroup>`:M.programmes.map(optF).join('')}`; fillS(); };
+  const fillS = ()=>{ const s=+$('#ff_s').value, F=$('#ff_F').value; const fit=m=>m.s===s && (!F||m.F.includes(F)); const rec=M.measures.filter(fit), oth=M.measures.filter(m=>!fit(m));
+    $('#ff_S').innerHTML = `<option value="">เลือก</option>${s?`<optgroup label="มาตรการที่สอดคล้อง">${rec.map(optS).join('')}</optgroup><optgroup label="มาตรการอื่น">${oth.map(optS).join('')}</optgroup>`:M.measures.map(optS).join('')}`; descS(); };
   const descS = ()=>{ const m=MEAS[$('#ff_S').value]; $('#ff_Sdesc').textContent = m ? `${m.desc||''} · กลุ่มพื้นที่เป้าหมาย: ${m.groups||'-'}` : ''; };
   const fillT = ()=>{
     const sb=$('#ff_sb').value, s=+$('#ff_s').value, none=$('#ff_none').checked;
@@ -898,7 +921,7 @@ function exportXlsx(list, name){
     'จังหวัด':L.prov.join(', '),'อำเภอ':L.amp.join(', '),'ตำบล':L.tam.join(', ')||'ไม่มีตำบลเป้าหมาย (ระดับลุ่มน้ำ)',
     'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
     'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
-    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':p.status,'หมายเหตุ':p.note,
+    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':stageOf(p),'หมายเหตุ':p.note,
     }; });
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [8,22,30,40,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24].map(w=>({wch:w}));
@@ -950,11 +973,12 @@ function bind(){
         if(el2.tagName==='INPUT'){ S.f.q=''; renderFilters(); renderView(); }
         else el2.dispatchEvent(new Event('change', {bubbles:true}));
         break; }
+      case 'stage': S.f.stage = (S.f.stage===v ? '' : v); renderFilters(); renderView(); break;
       case 'morefilt': S.moreOpen=!S.moreOpen; renderFilters(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }
       case 'fs': { const n=+a.dataset.n; S.f.s.has(n)?S.f.s.delete(n):S.f.s.add(n); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break; }
-      case 'clear': S.f={q:'',s:new Set(),F:'',S:'',grp:'',src:''}; renderFilters(); renderView(); break;
+      case 'clear': S.f={q:'',s:new Set(),F:'',S:'',grp:'',src:'',stage:''}; renderFilters(); renderView(); break;
       case 'newproj': { const d={}; if(a.dataset.tam){ const t=T[a.dataset.tam]; d.sb=t.sb[0]||''; d.tambons=[t.id]; } if(a.dataset.sb) d.sb=a.dataset.sb; openForm('new', d); break; }
       case 'edit': openForm('edit', P.find(p=>p.id===a.dataset.pid)); break;
       case 'del': $('#delBox').innerHTML = `<div class="confirm-box"><span>ลบโครงการ ${esc(a.dataset.pid)} ออกจากระบบถาวร?</span><button class="btn sm danger" data-act="delok" data-v="${esc(a.dataset.pid)}">ยืนยันลบ</button><button class="btn sm" data-act="delno">ยกเลิก</button></div>`; break;
