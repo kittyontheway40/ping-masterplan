@@ -358,6 +358,10 @@ function scopeCount(){
     const ids = new Set(M.tambons.filter(t=>t.p===S.prov && (!S.amp||t.a===S.amp) && (!S.tam||t.id===S.tam)).map(t=>t.id));
     base = P.filter(p=>(p.tambons||[]).some(id=>ids.has(id)));
     label = S.tam ? 'ต.'+T[S.tam].t : S.amp ? 'อ.'+S.amp : 'จ.'+S.prov;
+  } else if(S.tab==='map' && typeof MS!=='undefined' && ((MS.kind==='basin' && MS.basin) || MS.prov)){
+    const ids = new Set(M.tambons.filter(t=>inScope(t)).map(t=>t.id));
+    base = P.filter(p=>(MS.kind!=='basin' || !MS.basin || p.sb===MS.basin) && ((p.tambons||[]).some(id=>ids.has(id)) || (MS.kind==='basin' && MS.basin && !MS.prov && p.sb===MS.basin && !(p.tambons||[]).length)));
+    label = MS.kind==='basin' && MS.basin ? 'ลุ่มน้ำสาขา'+MS.basin+(MS.prov?' · '+(MS.tam?'ต.'+T[MS.tam].t:MS.amp?'อ.'+MS.amp:'จ.'+MS.prov):'') : (MS.tam?'ต.'+T[MS.tam].t:MS.amp?'อ.'+MS.amp:'จ.'+MS.prov);
   } else if(S.tab==='basin' && S.basin){
     base = P.filter(p=>p.sb===S.basin); label = 'ลุ่มน้ำสาขา'+S.basin;
     if(S.bprov){
@@ -582,6 +586,7 @@ function afterScope(){
   $('#mScope').innerHTML = scopeTools(); bindScope(); addClearButtons($('#mScope'));
   if(MS.kind!=='admin' || !MS.tam){ if(mapSel && !inScope(T[mapSel])) mapSel=null; }
   mapBoundaryLayers(); restyle(); mapLabels(); fitScope(); mapLegend(); mapProjects();
+  const fc=$('#filters .fcount'); if(fc) fc.innerHTML = scopeCount();
   if(L_HS) L_HS.setOpacity((MS.basin && MS.kind==='basin') || MS.prov ? .5 : 1);
   if(MS.tam){ const l=L_T.getLayers().find(x=>x.feature.properties.id===MS.tam); if(l) MAP.fitBounds(l.getBounds(), {maxZoom:11, padding:[30,30]}); mapPick(MS.tam, true); }
 }
@@ -864,7 +869,7 @@ function openWelcome(start){
       await Store.login($('#lg_email')?.value.trim(), $('#lg_pass').value, rem);
       Sess.set({role:'admin'}, rem);
       closeModal(); renderHeader(); toast('เข้าสู่ระบบผู้ดูแลแล้ว');
-    }catch(err){ btn.disabled=false; $('#lg_err').textContent = /invalid|wrong|password|credential|ไม่ถูกต้อง/i.test((err.code||'')+err.message) ? 'รหัสผู้ดูแลไม่ถูกต้อง' : (err.message||'เข้าสู่ระบบไม่สำเร็จ'); $('#lg_pass').select(); }
+    }catch(err){ btn.disabled=false; const code=(err.code||'')+' '+(err.message||''); $('#lg_err').textContent = /too-many-requests/i.test(code) ? 'ใส่รหัสผิดหลายครั้ง ระบบพักการเข้าสู่ระบบชั่วคราว ลองใหม่ในอีกไม่กี่นาที' : /network-request-failed/i.test(code) ? 'เชื่อมต่ออินเทอร์เน็ตไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองใหม่' : /user-not-found|user-disabled/i.test(code) ? 'ไม่พบบัญชีผู้ดูแล หรือบัญชีถูกปิดใช้งาน' : /invalid|wrong|password|credential|ไม่ถูกต้อง/i.test(code) ? 'รหัสผู้ดูแลไม่ถูกต้อง' : 'เข้าสู่ระบบไม่สำเร็จ: '+(err.message||''); $('#lg_pass').select(); }
   };
 }
 function exportXlsx(list, name){
