@@ -331,11 +331,11 @@ function renderFilters(){
   $('#filters').innerHTML = loc + `
     <div class="fld search"><label for="fq">ค้นหา</label><input id="fq" type="search" placeholder="ชื่อโครงการ ตำบล อำเภอ ลุ่มน้ำ หรือรหัส" value="${esc(f.q)}"></div>
     <div class="fld"><span class="lbl">ยุทธศาสตร์</span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
-    ${S.tab==='map'?`<button type="button" class="morebtn" data-act="morefilt" aria-expanded="${!!S.moreOpen}">ตัวกรองโครงการเพิ่มเติม${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)?` <span class="badge-n">${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)}</span>`:''} <span aria-hidden="true">${S.moreOpen?'▴':'▾'}</span></button><div class="morefilt" ${S.moreOpen?'':'hidden'}>`:''}
+    <div class="morebar"><button type="button" class="morebtn" data-act="morefilt" aria-expanded="${!!S.moreOpen}">ตัวกรองโครงการเพิ่มเติม${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)?` <span class="badge-n">${(f.F?1:0)+(f.S?1:0)+(f.grp?1:0)}</span>`:''} <span aria-hidden="true">${S.moreOpen?'▴':'▾'}</span></button><div class="fcount">${scopeCount()}</div></div><div class="morefilt" ${S.moreOpen?'':'hidden'}>
     <div class="fld"><label for="fF">แผนงานหลัก</label><select id="fF"><option value="">ทั้งหมด</option>${Fopts.map(p=>`<option value="${p.code}" ${f.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`).join('')}</select></div>
     <div class="fld"><label for="fS">มาตรการ</label><select id="fS"><option value="">ทั้งหมด</option>${Sopts.map(m=>`<option value="${m.code}" ${f.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`).join('')}</select></div>
-    <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div>${S.tab==='map'?'</div>':''}
-    <div class="fcount">${scopeCount()}</div>`;
+    <div class="fld"><label for="fG">กลุ่มพื้นที่</label><select id="fG"><option value="">ทั้งหมด</option>${'WPREG'.split('').map(fm=>`<optgroup label="${fm} · ${esc(M.groupFamilies[fm])}"><option value="${fm}" ${f.grp===fm?'selected':''}>${fm} ทั้งกลุ่ม</option>${Object.keys(M.groups).filter(k=>k[0]===fm).sort((a,b)=>+a.slice(1)-+b.slice(1)).map(k=>`<option value="${k}" ${f.grp===k?'selected':''}>${k} ${esc(M.groups[k])}</option>`).join('')}</optgroup>`).join('')}</select></div></div>
+`;
 }
 function scopeCount(){
   let base = P, label = '';
