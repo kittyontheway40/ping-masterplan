@@ -367,3 +367,12 @@ td.grp{min-width:130px}
 .trk-i[aria-pressed="true"]{border-color:var(--blue);background:var(--bg);font-weight:600}
 .trk-i i{width:9px;height:9px;border-radius:50%;display:inline-block}
 @media (max-width:620px){.locrow .tracker{flex-basis:100%;max-width:none;margin-left:0}}
+
+.role-badge{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;padding:5px 12px;border-radius:99px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;white-space:nowrap}
+.role-badge:empty{display:none}
+.role-badge i{width:8px;height:8px;border-radius:50%;background:#9fb0cc;display:inline-block}
+.role-badge .rl{opacity:.75}
+.role-badge.r-user i{background:#7fc8ff}
+.role-badge.r-admin{background:var(--pink);border-color:var(--pink)}
+.role-badge.r-admin i{background:#fff}
+.role-badge.r-noperm{background:#b7791f;border-color:#b7791f}

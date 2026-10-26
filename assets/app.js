@@ -323,7 +323,10 @@ function tamInfo(t, compact){
 function renderHeader(){
   $('#mode').outerHTML = `<span id="mode" class="mode ver" title="${Store.mode==='firebase'?'เชื่อมต่อฐานข้อมูลออนไลน์':'ยังไม่ได้เชื่อมต่อฐานข้อมูลออนไลน์ ข้อมูลที่เพิ่มเก็บในเบราว์เซอร์นี้'}"><i class="mdot ${Store.mode==='firebase'?'on':''}"></i>${esc(CFG.version||'')}</span>`;
   const ss = Sess.get();
-  $('#authBtn').innerHTML = S.admin ? 'ผู้ดูแลระบบ · ออกจากระบบ' : (ss?.role==='user' ? 'ผู้ใช้ทั่วไป · เข้าสู่ระบบผู้ดูแล' : 'เข้าสู่ระบบ');
+  const role = S.admin ? 'admin' : (S.user ? 'noperm' : (ss?.role==='user' ? 'user' : ''));
+  const RL = {admin:['ผู้ดูแลระบบ','แก้ไข อนุมัติ และลบโครงการได้'], user:['ผู้ใช้ทั่วไป','ดูข้อมูลและเสนอโครงการได้'], noperm:['ยังไม่มีสิทธิ์ผู้ดูแล','บัญชีนี้ยังไม่ได้อยู่ในรายชื่อผู้ดูแล'], '':['ยังไม่ได้เข้าสู่ระบบ','']};
+  const rb = $('#roleBadge'); if(rb){ rb.className = 'role-badge r-'+(role||'none'); rb.innerHTML = `<i></i><span class="rl">สถานะ</span> <b>${RL[role][0]}</b>`; rb.title = RL[role][1]; }
+  $('#authBtn').innerHTML = (S.admin || S.user) ? 'ออกจากระบบ' : 'เข้าสู่ระบบผู้ดูแล';
   const t = $('.tab[data-tab="admin"]'); t.innerHTML = `ผู้ดูแลระบบ${S.admin && SUBS.length ? `<span class="badge-n">${SUBS.length}</span>`:''}`;
 }
 const tip = t => `<button type="button" class="tip" aria-label="${esc(t)}" data-tip="${esc(t)}">i</button>`;
