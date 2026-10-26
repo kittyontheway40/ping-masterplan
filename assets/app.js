@@ -114,7 +114,14 @@ const Store = {
     await this.db.collection('submissions').add(rec);
   },
   nextId(){ const mx = P.reduce((m,p)=>Math.max(m, p.seq||0), 0); return {seq:mx+1, id:'P'+String(mx+1).padStart(4,'0')}; },
+  async ensureSeeded(){
+    if(this.mode!=='firebase' || !S.seedFallback) return;
+    toast('กำลังนำเข้าข้อมูลตั้งต้น 808 โครงการลงฐานข้อมูลก่อน…');
+    await this.seed();
+    S.seedFallback = false;
+  },
   async approve(sub, data){
+    await this.ensureSeeded();
     const {id, seq} = this.nextId();
     const proj = normProj(Object.assign({}, pickProj(data), {id, seq, src:'new', proposer:sub.proposer||'', proposerOrg:sub.proposerOrg||'', proposerContact:sub.proposerContact||'', approvedBy:S.user?.email||'', approvedAt:new Date().toISOString()}));
     if(this.mode==='demo'){
@@ -146,13 +153,14 @@ const Store = {
       this.demoAudit('แก้ไขโครงการ', id, changed.map(k=>FIELD_TH[k]||k).join(', '));
       this.demoSave(o=>{ const i=o.added.findIndex(x=>x.id===id); if(i>=0) o.added[i]=upd; else o.edited[id]=upd; }); return;
     }
-    if(S.seedFallback) throw new Error('ยังไม่ได้นำเข้าข้อมูลตั้งต้นลงฐานข้อมูล กรุณานำเข้าที่หน้าผู้ดูแลระบบก่อน');
+    await this.ensureSeeded();
     const b = this.db.batch();
     b.set(this.db.doc('projects/'+id), upd);
     b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'แก้ไขโครงการ', id, detail:changed.map(k=>FIELD_TH[k]||k).join(', ')});
     await b.commit();
   },
   async deleteProject(id){
+    await this.ensureSeeded();
     const old = P.find(p=>p.id===id);
     if(this.mode==='demo'){
       this.demoAudit('ลบโครงการ', id, old?.title);
