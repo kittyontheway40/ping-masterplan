@@ -2,10 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ผู้ดูแลระบบ = มีเอกสารใน /admins/{uid}  (เพิ่มเองใน Firebase Console เท่านั้น)
+    // ผู้ดูแลระบบ = บัญชีผู้ดูแลกลาง (อีเมลด้านล่าง) หรือมีเอกสารใน /admins/{uid} (เพิ่มเองใน Firebase Console)
     function isAdmin() {
       return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && (request.auth.token.email == 'chidsumons@gmail.com'
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     // โครงการที่อนุมัติแล้ว: ทุกคนอ่านได้โดยไม่ต้องล็อกอิน, เขียนได้เฉพาะผู้ดูแล

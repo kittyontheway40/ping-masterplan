@@ -83,7 +83,8 @@ const Store = {
       this.unsub.forEach(f=>f()); this.unsub=[]; SUBS=[]; AUDIT=[];
       S.user = u ? {email:u.email, uid:u.uid} : null; S.admin=false;
       if(u){
-        try{ const d = await this.db.doc('admins/'+u.uid).get(); S.admin = d.exists; }catch(e){ S.admin=false; }
+        // ตรวจสิทธิ์ตามกฎ Firestore จริง: อ่านกล่องรอพิจารณาได้ = เป็นผู้ดูแล
+        try{ await this.db.collection('submissions').limit(1).get(); S.admin = true; }catch(e){ S.admin=false; S.permErr = e.code||e.message; }
         if(!S.admin){ toast('บัญชีนี้ยังไม่ได้รับสิทธิ์ผู้ดูแลระบบ'); }
         else {
           this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>Object.assign({_id:d.id}, d.data())).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); renderHeader(); if(S.tab==='admin') renderView(); }));
@@ -768,6 +769,22 @@ function mapPick(id, noZoom, noPopup, latlng){
 /* ================= VIEW: ADMIN ================= */
 function renderAdmin(){
   const el = $('#view');
+  if(!S.admin && S.user && Store.mode!=='demo'){
+    el.innerHTML = `<div class="info" style="max-width:760px"><h2>เข้าสู่ระบบสำเร็จ แต่บัญชียังไม่มีสิทธิ์ผู้ดูแล</h2>
+      <p>รหัสผ่านถูกต้องแล้ว แต่ฐานข้อมูล Firebase ยังไม่รู้จักบัญชีนี้ว่าเป็นผู้ดูแล จึงยังอนุมัติ/แก้ไขไม่ได้ ต้องตั้งค่าใน Firebase Console หนึ่งครั้ง</p>
+      <table class="kv"><tr><th>อีเมล</th><td>${esc(S.user.email||'-')}</td></tr>
+      <tr><th>UID</th><td><code id="myUid">${esc(S.user.uid||'-')}</code> <button class="btn sm copyb" data-act="copyuid">คัดลอก</button></td></tr></table>
+      <h3>วิธีแก้ (เลือกอย่างใดอย่างหนึ่ง)</h3>
+      <ol class="steps-ol">
+        <li><b>อัปเดตกฎความปลอดภัย (แนะนำ)</b> — เปิด <a href="https://console.firebase.google.com/project/ping-masterplan/firestore/rules" target="_blank" rel="noopener">Firestore → Rules</a> ลบของเดิมทั้งหมด วางเนื้อหาไฟล์ <code>firestore.rules</code> ฉบับล่าสุดใน GitHub แล้วกด <b>Publish</b> (กฎใหม่ให้สิทธิ์ผู้ดูแลกับอีเมล ${esc(CFG.adminEmail||'')} อัตโนมัติ)</li>
+        <li><b>หรือเพิ่มรายชื่อผู้ดูแลเอง</b> — เปิด <a href="https://console.firebase.google.com/project/ping-masterplan/firestore/data" target="_blank" rel="noopener">Firestore → Data</a> กด Start collection ตั้งชื่อ <code>admins</code> → Document ID วาง UID ด้านบน → เพิ่มฟิลด์ <code>email</code> = อีเมลผู้ดูแล → Save</li>
+      </ol>
+      <p class="muted">ทำเสร็จแล้วกด “ตรวจสิทธิ์อีกครั้ง” ได้เลย ไม่ต้องออกจากระบบ</p>
+      <button class="btn primary" data-act="recheck">ตรวจสิทธิ์อีกครั้ง</button>
+      ${S.permErr?`<p class="muted" style="margin-top:10px">รหัสข้อผิดพลาด: ${esc(S.permErr)}</p>`:''}
+</div>`;
+    return;
+  }
   if(!S.admin){
     el.innerHTML = `<div class="info" style="max-width:640px"><h2>สำหรับผู้ดูแลระบบ</h2>
       <p>หน้านี้ใช้คัดกรองและอนุมัติโครงการที่มีผู้เสนอเข้ามา รวมทั้งแก้ไขข้อมูลโครงการที่มีอยู่แล้ว ต้องเข้าสู่ระบบด้วยบัญชีผู้ดูแลก่อน</p>
@@ -1016,6 +1033,8 @@ function bind(){
       case 'delno': $('#delBox').innerHTML=''; break;
       case 'delok': try{ await Store.deleteProject(v); closeModal(); toast('ลบโครงการแล้ว'); }catch(err){ toast('ลบไม่สำเร็จ: '+err.message); } break;
       case 'login': openLogin(); break;
+      case 'copyuid': { try{ await navigator.clipboard.writeText(S.user?.uid||''); toast('คัดลอก UID แล้ว'); }catch(e){ toast('คัดลอกไม่ได้ กรุณาเลือกข้อความเอง'); } break; }
+      case 'recheck': { try{ await Store.db.collection('submissions').limit(1).get(); location.reload(); }catch(e){ S.permErr=e.code||e.message; toast('ยังไม่มีสิทธิ์ผู้ดูแล ตรวจการตั้งค่าใน Firebase อีกครั้ง'); renderView(); } break; }
       case 'auth': { if(S.admin||S.user){ await Store.logout(); Sess.set({role:'user'}, true); renderHeader(); toast('ออกจากระบบผู้ดูแลแล้ว ใช้งานต่อในฐานะผู้ใช้ทั่วไป'); } else openWelcome('admin'); break; }
       case 'role': { $$('.role-b').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='admin')); $('#wf_admin').hidden=false; $('#lg_pass').focus(); break; }
       case 'enteruser': { if(S.admin) await Store.logout(); Sess.set({role:'user'}, true); closeModal(); renderHeader(); toast('เข้าใช้งานในฐานะผู้ใช้ทั่วไป'); break; }
