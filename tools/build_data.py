@@ -29,6 +29,16 @@ for _,r in ov.iterrows():
   sh=r.a/tarea[r.id]
   if sh>=0.02: sub[r.id].append((r.SB_NAME_T,round(sh*100,1)))
 for k in sub: sub[k].sort(key=lambda x:-x[1])
+# กฎเสริม: ลุ่มน้ำสาขาที่ไม่เป็นลุ่มหลักของตำบลใดเลย ให้ตำบลที่ครอบคลุมพื้นที่ลุ่มนั้นมากที่สุดย้ายมาเป็นลุ่มหลัก
+main_cnt=C.Counter(v[0][0] for v in sub.values() if v); moved={}
+for bname in sb.SB_NAME_T:
+  if main_cnt[bname]: continue
+  cand=ov[ov.SB_NAME_T==bname].sort_values('a',ascending=False)
+  for _,cr in cand.iterrows():
+    lst=sub.get(cr.id,[])
+    if not lst or main_cnt[lst[0][0]]<=1: continue   # ห้ามทำให้อีกลุ่มว่าง
+    old=lst[0][0]; lst.sort(key=lambda x:(x[0]!=bname,-x[1])); main_cnt[old]-=1; main_cnt[bname]+=1
+    moved[cr.id]=(bname, round(cr.a/(sb[sb.SB_NAME_T==bname].area.sum()/1e6)*100,1), old); print('rule: moved',cr.id,'from',old,'to',bname); break
 # ---------- plan excel ----------
 import os
 PLAN=os.environ.get('PLAN', D+'plan.xlsx')
@@ -69,6 +79,8 @@ for r in s6:
   d['F']=sorted(set(d['F'])|set(splitcodes(r[I6['F']])),key=lambda x:int(x[1:]))
   b0=r[I6['sb']]; d['tBasins'].append(b0); s6basin[b0].add(key2id[k])
   if not d['geo'] and b0 not in d['sb']: d['sb'].append(b0)
+for mid,(bn,share,old) in moved.items():
+  if mid in tamb: tamb[mid]['sbNote']=f'กำหนดให้อยู่ลุ่มน้ำสาขา{bn} เพราะตำบลนี้ครอบคลุม {share}% ของพื้นที่ลุ่ม (ลุ่มนี้ไม่มีตำบลที่มีพื้นที่ส่วนใหญ่อยู่ในลุ่ม)'
 print('tambons',len(tamb),'extra',extra,'targets',sum(v['target'] for v in tamb.values()))
 # target basin vs overlay consistency
 bad=[(v['t'],b,v['sb']) for v in tamb.values() for b in v['tBasins'] if v['geo'] and b not in v['sb']]

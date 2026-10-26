@@ -299,7 +299,7 @@ function grpCounts(tams){
   return `<div class="grp-list">${keys.map(k=>`<span class="grp-item" title="${esc(M.groupFamilies[k[0]]||'')}"><b class="c" style="color:${SCOL['WPREG'.indexOf(k[0])+1]}">${k}</b>${esc(M.groups[k]||'')}<span class="n">${c[k]}</span></span>`).join('')}</div>`;
 }
 function tamInfo(t, compact){
-  const sbs = `<b>${esc(sbMain(t))}</b>${t.sbPct[0]!=null?` <span class="note">(${t.sbPct[0]}% ของพื้นที่ตำบล)</span>`:''}` + (t.sb.length>1 ? `<div class="note">คาบเกี่ยว: ${t.sb.slice(1).map((b,i)=>esc(b)+(t.sbPct[i+1]!=null?` ${t.sbPct[i+1]}%`:'')).join(', ')}</div>` : '');
+  const sbs = `<b>${esc(sbMain(t))}</b>${t.sbPct[0]!=null?` <span class="note">(${t.sbPct[0]}% ของพื้นที่ตำบล)</span>`:''}` + (t.sbNote ? `<div class="note" style="color:var(--blue)">${esc(t.sbNote)}</div>` : '') + (t.sb.length>1 ? `<div class="note">คาบเกี่ยว: ${t.sb.slice(1).map((b,i)=>esc(b)+(t.sbPct[i+1]!=null?` ${t.sbPct[i+1]}%`:'')).join(', ')}</div>` : '');
   const grps = t.grp.length ? t.grp.map(g=>`<div><span class="pill code">${g}</span> ${esc(M.groups[g]||'')} <span class="note">· ${esc(M.groupFamilies[g[0]]||'')}</span></div>`).join('') : '<span class="note">ไม่อยู่ในกลุ่มพื้นที่ปัญหา</span>';
   return `<dl class="dl">
     <dt>สถานะเป้าหมาย</dt><dd>${tPill(t)} ${t.target?`<span class="note">พบปัญหา ${t.strat.length} ยุทธศาสตร์</span>`:'<span class="note">ไม่พบปัญหาเด่นตามเกณฑ์ 5 ยุทธศาสตร์</span>'}</dd>
@@ -859,10 +859,11 @@ function openForm(mode, data={}, sub=null){
   <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn ${mode==='new'?'pink':'primary'}" id="ff_save">${mode==='new'?'ส่งให้ผู้ดูแลพิจารณา':mode==='edit'?'บันทึกการแก้ไข':'อนุมัติและบันทึกลงระบบ'}</button></div>`);
   let picked = new Set(d.tambons||[]);
   const optF = p=>`<option value="${p.code}" ${d.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`;
+  const multiF = d.F && String(d.F).includes(',') ? `<optgroup label="ค่าเดิม (หลายแผนงาน)"><option value="${esc(d.F)}" selected>${esc(d.F)}</option></optgroup>` : '';
   const optS = m=>`<option value="${m.code}" ${d.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`;
   const fillF = ()=>{ const s=+$('#ff_s').value; const rec=M.programmes.filter(p=>p.s===s), oth=M.programmes.filter(p=>p.s!==s);
-    $('#ff_F').innerHTML = `<option value="">เลือก</option>${s?`<optgroup label="แผนงานของยุทธศาสตร์ที่ ${s}">${rec.map(optF).join('')}</optgroup><optgroup label="แผนงานอื่น">${oth.map(optF).join('')}</optgroup>`:M.programmes.map(optF).join('')}`; fillS(); };
-  const fillS = ()=>{ const s=+$('#ff_s').value, F=$('#ff_F').value; const fit=m=>m.s===s && (!F||m.F.includes(F)); const rec=M.measures.filter(fit), oth=M.measures.filter(m=>!fit(m));
+    $('#ff_F').innerHTML = `<option value="">เลือก</option>${multiF}${s?`<optgroup label="แผนงานของยุทธศาสตร์ที่ ${s}">${rec.map(optF).join('')}</optgroup><optgroup label="แผนงานอื่น">${oth.map(optF).join('')}</optgroup>`:M.programmes.map(optF).join('')}`; fillS(); };
+  const fillS = ()=>{ const s=+$('#ff_s').value, F=$('#ff_F').value; const Fs=String(F||'').split(/,\s*/).filter(Boolean); const fit=m=>m.s===s && (!Fs.length||Fs.some(f=>m.F.includes(f))); const rec=M.measures.filter(fit), oth=M.measures.filter(m=>!fit(m));
     $('#ff_S').innerHTML = `<option value="">เลือก</option>${s?`<optgroup label="มาตรการที่สอดคล้อง">${rec.map(optS).join('')}</optgroup><optgroup label="มาตรการอื่น">${oth.map(optS).join('')}</optgroup>`:M.measures.map(optS).join('')}`; descS(); };
   const descS = ()=>{ const m=MEAS[$('#ff_S').value]; $('#ff_Sdesc').textContent = m ? `${m.desc||''} · กลุ่มพื้นที่เป้าหมาย: ${m.groups||'-'}` : ''; };
   const fillT = ()=>{
@@ -935,7 +936,7 @@ function exportXlsx(list, name){
   if(!window.XLSX){ toast('ยังโหลดตัวส่งออกไม่เสร็จ ลองใหม่อีกครั้ง'); return; }
   list = list || filt(P);
   const rows = list.map(p=>{ const L = projLoc(p); const G = projGrpList(p); return {
-    'รหัส':p.id,'ยุทธศาสตร์':`${p.s} ${STRAT[p.s]?.short||''}`,'แผนงาน':`${p.F} ${PROG[p.F]?.name||''}`,'มาตรการ':`${p.S} ${MEAS[p.S]?.name||''}`,
+    'รหัส':p.id,'ยุทธศาสตร์':`${p.s} ${STRAT[p.s]?.short||''}`,'แผนงาน':String(p.F).split(/,\s*/).map(f=>`${f} ${PROG[f]?.name||''}`).join('; '),'มาตรการ':`${p.S} ${MEAS[p.S]?.name||''}`,
     'แนวทาง/โครงการ':p.title,'รายละเอียด':p.detail,'ลุ่มน้ำสาขา':p.sb,
     'จังหวัด':L.prov.join(', '),'อำเภอ':L.amp.join(', '),'ตำบล':L.tam.join(', ')||'ไม่มีตำบลเป้าหมาย (ระดับลุ่มน้ำ)',
     'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
