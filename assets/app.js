@@ -39,7 +39,7 @@ function toast(msg){
   setTimeout(()=>el.remove(), 3200);
 }
 function normProj(p){
-  return Object.assign({id:'',seq:0,sb:'',ref:'',s:null,F:'',S:'',title:'',detail:'',tambons:[],agency:'',budget:null,yearStart:null,yearEnd:null,status:'',note:'',src:'excel'}, p);
+  return Object.assign({id:'',seq:0,sb:'',ref:'',s:null,F:'',S:'',grp:'',title:'',detail:'',tambons:[],agency:'',budget:null,yearStart:null,yearEnd:null,status:'',note:'',src:'excel'}, p);
 }
 
 /* ================= STORE ================= */
@@ -87,7 +87,7 @@ const Store = {
         try{ await this.db.collection('submissions').limit(1).get(); S.admin = true; }catch(e){ S.admin=false; S.permErr = e.code||e.message; }
         if(!S.admin){ toast('บัญชีนี้ยังไม่ได้รับสิทธิ์ผู้ดูแลระบบ'); }
         else {
-          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>Object.assign({_id:d.id}, d.data())).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); renderHeader(); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>{ const o=Object.assign({_id:d.id}, d.data()); if(!o.grp && /^grp:/.test(o.ref||'')){ o.grp=o.ref.slice(4); o.ref=''; } return o; }).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); renderHeader(); if(S.tab==='admin') renderView(); }));
           this.unsub.push(this.db.collection('audit').orderBy('ts','desc').limit(60).onSnapshot(s=>{ AUDIT = s.docs.map(d=>d.data()); if(S.tab==='admin') renderView(); }));
         }
       }
@@ -112,7 +112,12 @@ const Store = {
       const a = LS.get('ping_subs', []); a.unshift(rec); LS.set('ping_subs', a); SUBS = a.filter(s=>s.review==='pending'); renderHeader(); return;
     }
     rec.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    await this.db.collection('submissions').add(rec);
+    try{ await this.db.collection('submissions').add(rec); }
+    catch(e){
+      // กฎ Firestore รุ่นเก่ายังไม่รู้จักช่อง grp → เก็บไว้ในช่อง ref แทน
+      if(rec.grp && /permission/i.test(e.code||e.message)){ const r2=Object.assign({}, rec, {ref:'grp:'+rec.grp}); delete r2.grp; await this.db.collection('submissions').add(r2); }
+      else throw e;
+    }
   },
   nextId(){ const mx = P.reduce((m,p)=>Math.max(m, p.seq||0), 0); return {seq:mx+1, id:'P'+String(mx+1).padStart(4,'0')}; },
   async ensureSeeded(){
@@ -201,8 +206,8 @@ const Store = {
     await this.db.collection('audit').add({ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'นำเข้าข้อมูลตั้งต้น', id:'-', detail:all.length+' โครงการ'});
   }
 };
-const PROJ_FIELDS = ['sb','ref','s','F','S','title','detail','tambons','agency','budget','yearStart','yearEnd','status','note'];
-const FIELD_TH = {sb:'ลุ่มน้ำสาขา',ref:'ตารางอ้างอิง',s:'ยุทธศาสตร์',F:'แผนงาน',S:'มาตรการ',title:'ชื่อแนวทาง/โครงการ',detail:'รายละเอียด',tambons:'ตำบลเป้าหมาย',agency:'หน่วยงานรับผิดชอบ',budget:'งบประมาณ',yearStart:'ปีเริ่ม',yearEnd:'ปีสิ้นสุด',status:'สถานะ',note:'หมายเหตุ'};
+const PROJ_FIELDS = ['sb','ref','s','F','S','grp','title','detail','tambons','agency','budget','yearStart','yearEnd','status','note'];
+const FIELD_TH = {sb:'ลุ่มน้ำสาขา',ref:'ตารางอ้างอิง',s:'ยุทธศาสตร์',F:'แผนงาน',S:'มาตรการ',grp:'สภาพพื้นที่',title:'ชื่อแนวทาง/โครงการ',detail:'รายละเอียด',tambons:'ตำบลเป้าหมาย',agency:'หน่วยงานรับผิดชอบ',budget:'งบประมาณ',yearStart:'ปีเริ่ม',yearEnd:'ปีสิ้นสุด',status:'สถานะ',note:'หมายเหตุ'};
 function pickPlan(d){ const o={}; ['sb','s','F','S','title','detail','tambons','ref'].forEach(k=>o[k]=d[k]); return o; }
 function seedDiffCount(){ const byId=Object.fromEntries(P.map(p=>[p.id,p])); return SEED.filter(sp=>{ const c=byId[sp.id]; return !c || ['sb','s','F','S','title','detail','tambons','ref'].some(f=>JSON.stringify(c[f]??'')!==JSON.stringify(sp[f]??'')); }).length; }
 function pickProj(d){ const o={}; PROJ_FIELDS.forEach(k=>{ if(k in d) o[k]=d[k]; }); return o; }
@@ -220,6 +225,7 @@ const sbMain = t => t.sb[0] || '';
 function tamInBasin(b){ return M.tambons.filter(t=>sbMain(t)===b); }
 function tamInBasinAll(b){ return M.tambons.filter(t=>t.sb.includes(b)); }
 function projGroups(p){
+  if(p.grp) return new Set([p.grp]);   // สภาพพื้นที่ที่ผู้เสนอระบุ
   const g = new Set();
   (p.tambons||[]).forEach(id=>(T[id]?.grp||[]).forEach(c=>g.add(c)));
   return g;
@@ -289,7 +295,7 @@ function tableInner(key){
       <td class="num sub">${esc(p.id)}</td>
       <td>${sPill(p.s)}</td>
       <td class="t">${esc(p.title)}${p.src==='new'?' <span class="pill new">เพิ่มใหม่</span>':''}${stageOf(p)!=='ยังไม่ระบุ'?`<div class="sub"><i class="dot" style="background:${STAGES.find(x=>x[0]===stageOf(p))[1]};width:7px;height:7px"></i> ${esc(stageOf(p))}</div>`:''}</td>
-      <td><span class="pill code">${esc(p.F)}</span> <span class="pill code">${esc(p.S)}</span></td>
+      <td>${p.F||p.S?`<span class="pill code">${esc(p.F)}</span> <span class="pill code">${esc(p.S)}</span>`:'<span class="sub">–</span>'}</td>
       ${opts.noBasin?'':`<td class="b">${esc(p.sb)}</td>`}
       <td class="loc">${L.ts.length?shortList(L.prov,'จ.'):basinLvl}</td>
       <td class="loc">${L.ts.length?shortList(L.amp,'อ.'):''}</td>
@@ -794,7 +800,7 @@ function renderAdmin(){
   }
   const subs = SUBS.map(s=>`<div class="sub-card" data-sid="${esc(s._id)}">
     <div style="display:flex;gap:8px;align-items:start;flex-wrap:wrap"><span class="pill pending">รอพิจารณา</span>${sPill(s.s)}<b style="flex:1;min-width:200px">${esc(s.title)}</b></div>
-    <div class="meta">ลุ่มน้ำ${esc(s.sb)} · ${esc(s.F)} / ${esc(s.S)} · ${(s.tambons||[]).length ? (s.tambons||[]).map(id=>'ต.'+(T[id]?.t||id)).join(', ') : 'ไม่ระบุตำบล'}</div>
+    <div class="meta">ลุ่มน้ำ${esc(s.sb)} · ${s.grp?`สภาพพื้นที่ ${esc(s.grp)} ${esc(M.groups[s.grp]||'')}`:[s.F,s.S].filter(Boolean).map(esc).join(' / ')} · ${(s.tambons||[]).length ? (s.tambons||[]).map(id=>'ต.'+(T[id]?.t||id)).join(', ') : 'ไม่ระบุตำบล'}</div>
     ${s.detail?`<div style="font-size:.88rem">${esc(s.detail)}</div>`:''}
     <div class="meta">เสนอโดย ${esc(s.proposer)} · ${esc(s.proposerOrg)}${s.proposerContact?' · '+esc(s.proposerContact):''} · ${s.createdAt?.seconds?new Date(s.createdAt.seconds*1000).toLocaleString('th-TH'):''}</div>
     <div class="acts"><button class="btn sm primary" data-act="approve" data-sid="${esc(s._id)}">อนุมัติ</button><button class="btn sm" data-act="review" data-sid="${esc(s._id)}">ตรวจ/แก้ไขก่อนอนุมัติ</button><button class="btn sm danger" data-act="reject" data-sid="${esc(s._id)}">ไม่อนุมัติ</button></div>
@@ -831,8 +837,9 @@ function openProject(id){
   <div class="modal-b">
     <dl class="dl" style="margin:0">
       <dt>ยุทธศาสตร์</dt><dd>${sPill(p.s)} ${esc(STRAT[p.s]?.short||'')}</dd>
-      <dt>แผนงานหลัก</dt><dd>${String(p.F).split(/,\s*/).map(f=>`<span class="pill code">${esc(f)}</span> ${esc(PROG[f]?.name||'')}`).join('<br>')}</dd>
-      <dt>มาตรการเชิงยุทธศาสตร์</dt><dd><span class="pill code">${esc(p.S)}</span> ${esc(MEAS[p.S]?.name||'')}${MEAS[p.S]?.desc?`<div class="note">${esc(MEAS[p.S].desc)}</div>`:''}</dd>
+      ${p.grp?`<dt>สภาพพื้นที่</dt><dd><span class="pill code">${esc(p.grp)}</span> ${esc(M.groups[p.grp]||'')}</dd>`:''}
+      ${p.F?`<dt>แผนงานหลัก</dt><dd>${String(p.F).split(/,\s*/).map(f=>`<span class="pill code">${esc(f)}</span> ${esc(PROG[f]?.name||'')}`).join('<br>')}</dd>`:''}
+      ${p.S?`<dt>มาตรการเชิงยุทธศาสตร์</dt><dd><span class="pill code">${esc(p.S)}</span> ${esc(MEAS[p.S]?.name||'')}${MEAS[p.S]?.desc?`<div class="note">${esc(MEAS[p.S].desc)}</div>`:''}</dd>`:''}
       <dt>ลุ่มน้ำสาขา</dt><dd><button class="linkbtn" data-act="gobasin" data-v="${esc(p.sb)}">${esc(p.sb)}</button></dd>
       ${p.ref?`<dt>ตารางอ้างอิง</dt><dd>${esc(p.ref)}</dd>`:''}
       <dt>รายละเอียด</dt><dd style="white-space:pre-line">${esc(p.detail||p.title)}</dd>
@@ -852,7 +859,7 @@ function openProject(id){
 }
 function openForm(mode, data={}, sub=null){
   // mode: new | edit | review
-  const d = Object.assign({sb:'', s:'', F:'', S:'', title:'', detail:'', tambons:[], agency:'', budget:'', yearStart:'', yearEnd:'', status:'', note:'', ref:'', proposer:'', proposerOrg:'', proposerContact:''}, data);
+  const d = Object.assign({sb:'', s:'', F:'', S:'', grp:'', title:'', detail:'', tambons:[], agency:'', budget:'', yearStart:'', yearEnd:'', status:'', note:'', ref:'', proposer:'', proposerOrg:'', proposerContact:''}, data);
   const title = mode==='new' ? 'เสนอแนวทาง/โครงการใหม่' : mode==='edit' ? `แก้ไขโครงการ ${d.id}` : 'ตรวจและแก้ไขก่อนอนุมัติ';
   modal(`<div class="modal-h"><div><h2>${title}</h2>${mode==='new'?'<div class="note">ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>':''}</div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
   <form id="pform" class="modal-b" novalidate>
@@ -863,9 +870,9 @@ function openForm(mode, data={}, sub=null){
     <div class="formsec">ตำแหน่งในแผนแม่บท</div><div class="form-grid">
       <div class="fld full"><label class="req" for="ff_sb">ลุ่มน้ำสาขา (ลุ่มน้ำปิง)</label><select id="ff_sb"><option value="">เลือกลุ่มน้ำสาขา</option>${M.basins.map(b=>`<option ${d.sb===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
       <div class="fld full"><label class="req" for="ff_s">ยุทธศาสตร์</label><select id="ff_s"><option value="">เลือกยุทธศาสตร์</option>${M.strategies.map(s=>`<option value="${s.n}" ${+d.s===s.n?'selected':''}>ยุทธศาสตร์ที่ ${s.n} ${esc(s.short)}</option>`).join('')}</select></div>
-      <div class="fld"><label class="req" for="ff_F">แผนงานหลัก</label><select id="ff_F"></select></div>
-      <div class="fld"><label class="req" for="ff_S">มาตรการเชิงยุทธศาสตร์</label><select id="ff_S"></select></div>
-      <div class="fld full note" id="ff_Sdesc"></div>
+      <div class="fld full"><label class="${mode==='edit'?'':'req'}" for="ff_grp_sel">สภาพพื้นที่</label><select id="ff_grp_sel"></select>
+        <div class="note" id="ff_grpHint">เลือกยุทธศาสตร์ก่อน แล้วจึงเลือกสภาพพื้นที่ของยุทธศาสตร์นั้น</div></div>
+      ${d.F||d.S?`<div class="fld full note">แผนงาน/มาตรการเดิมจากแผนแม่บท: ${esc([d.F,d.S].filter(Boolean).join(' / '))} (คงไว้ตามเดิม)</div>`:''}
     </div>
     <div class="formsec">รายละเอียดแนวทาง/โครงการ</div><div class="form-grid">
       <div class="fld full"><label class="req" for="ff_title">ชื่อแนวทาง/โครงการ</label><input id="ff_title" maxlength="300" value="${esc(d.title)}"></div>
@@ -886,14 +893,15 @@ function openForm(mode, data={}, sub=null){
   </form>
   <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn ${mode==='new'?'pink':'primary'}" id="ff_save">${mode==='new'?'ส่งให้ผู้ดูแลพิจารณา':mode==='edit'?'บันทึกการแก้ไข':'อนุมัติและบันทึกลงระบบ'}</button></div>`);
   let picked = new Set(d.tambons||[]);
-  const optF = p=>`<option value="${p.code}" ${d.F===p.code?'selected':''}>${p.code} ${esc(p.name)}</option>`;
-  const multiF = d.F && String(d.F).includes(',') ? `<optgroup label="ค่าเดิม (หลายแผนงาน)"><option value="${esc(d.F)}" selected>${esc(d.F)}</option></optgroup>` : '';
-  const optS = m=>`<option value="${m.code}" ${d.S===m.code?'selected':''}>${m.code} ${esc(m.name)}</option>`;
-  const fillF = ()=>{ const s=+$('#ff_s').value; const rec=M.programmes.filter(p=>p.s===s), oth=M.programmes.filter(p=>p.s!==s);
-    $('#ff_F').innerHTML = `<option value="">เลือก</option>${multiF}${s?`<optgroup label="แผนงานของยุทธศาสตร์ที่ ${s}">${rec.map(optF).join('')}</optgroup><optgroup label="แผนงานอื่น">${oth.map(optF).join('')}</optgroup>`:M.programmes.map(optF).join('')}`; fillS(); };
-  const fillS = ()=>{ const s=+$('#ff_s').value, F=$('#ff_F').value; const Fs=String(F||'').split(/,\s*/).filter(Boolean); const fit=m=>m.s===s && (!Fs.length||Fs.some(f=>m.F.includes(f))); const rec=M.measures.filter(fit), oth=M.measures.filter(m=>!fit(m));
-    $('#ff_S').innerHTML = `<option value="">เลือก</option>${s?`<optgroup label="มาตรการที่สอดคล้อง">${rec.map(optS).join('')}</optgroup><optgroup label="มาตรการอื่น">${oth.map(optS).join('')}</optgroup>`:M.measures.map(optS).join('')}`; descS(); };
-  const descS = ()=>{ const m=MEAS[$('#ff_S').value]; $('#ff_Sdesc').textContent = m ? `${m.desc||''} · กลุ่มพื้นที่เป้าหมาย: ${m.groups||'-'}` : ''; };
+  // สภาพพื้นที่ภายใต้ยุทธศาสตร์: ยศ.1=W 2=P 3=R 4=E 5=G
+  const fillG = ()=>{ const s=+$('#ff_s').value, sel=$('#ff_grp_sel'), fam='WPREG'[s-1];
+    if(!s){ sel.innerHTML='<option value="">เลือกยุทธศาสตร์ก่อน</option>'; sel.disabled=true; $('#ff_grpHint').textContent='เลือกยุทธศาสตร์ก่อน แล้วจึงเลือกสภาพพื้นที่ของยุทธศาสตร์นั้น'; return; }
+    sel.disabled=false;
+    const inT=new Set(); if(!$('#ff_none').checked) picked.forEach(id=>(T[id]?.grp||[]).forEach(c=>inT.add(c)));
+    const ks=Object.keys(M.groups).filter(k=>k[0]===fam).sort((a,b)=>+a.slice(1)-+b.slice(1));
+    const opt=k=>`<option value="${k}" ${d.grp===k?'selected':''}>${k} ${esc(M.groups[k])}${inT.has(k)?' ★':''}</option>`;
+    sel.innerHTML=`<option value="">เลือกสภาพพื้นที่</option><optgroup label="${fam} · ${esc(M.groupFamilies[fam])}">${ks.map(opt).join('')}</optgroup>`;
+    $('#ff_grpHint').textContent = inT.size&&ks.some(k=>inT.has(k)) ? '★ = พบในตำบลเป้าหมายที่เลือก' : `สภาพพื้นที่ของยุทธศาสตร์ที่ ${s} ${STRAT[s]?.short||''}`; };
   const fillT = ()=>{
     const sb=$('#ff_sb').value, s=+$('#ff_s').value, none=$('#ff_none').checked;
     const box=$('#ff_tams');
@@ -902,22 +910,21 @@ function openForm(mode, data={}, sub=null){
     box.innerHTML = ts.map(t=>`<label><input type="checkbox" value="${t.id}" ${picked.has(t.id)?'checked':''} ${none?'disabled':''}> ${t.strat.includes(s)?'★ ':''}ต.${esc(t.t)} อ.${esc(t.a)} จ.${esc(t.p)} ${t.target?'<span class="pill tg">เป้าหมาย</span>':''}</label>`).join('');
     grpShow();
   };
-  const grpShow = ()=>{ const g=new Set(); if(!$('#ff_none').checked) picked.forEach(id=>(T[id]?.grp||[]).forEach(c=>g.add(c))); $('#ff_grp').textContent = g.size ? 'กลุ่มพื้นที่ (คำนวณจากตำบลที่เลือก): '+[...g].sort().join(', ') : ''; };
-  $('#ff_s').onchange = ()=>{ d.F=''; d.S=''; fillF(); fillT(); };
-  $('#ff_F').onchange = ()=>{ d.S=''; fillS(); };
-  $('#ff_S').onchange = descS;
+  const grpShow = ()=>{ const g=new Set(); if(!$('#ff_none').checked) picked.forEach(id=>(T[id]?.grp||[]).forEach(c=>g.add(c))); $('#ff_grp').textContent = g.size ? 'กลุ่มพื้นที่ของตำบลที่เลือก: '+[...g].sort().join(', ') : ''; d.grp=$('#ff_grp_sel').value; fillG(); };
+  $('#ff_s').onchange = ()=>{ d.grp=''; fillG(); fillT(); };
+  $('#ff_grp_sel').onchange = ()=>{ d.grp=$('#ff_grp_sel').value; };
   $('#ff_sb').onchange = ()=>{ const sb=$('#ff_sb').value; picked = new Set([...picked].filter(id=>T[id]?.sb.includes(sb))); fillT(); };
   $('#ff_none').onchange = fillT;
   $('#ff_tams').addEventListener('change', e=>{ if(e.target.type==='checkbox'){ e.target.checked?picked.add(e.target.value):picked.delete(e.target.value); grpShow(); } });
-  fillF(); fillT();
+  fillG(); fillT();
   $('#ff_save').onclick = async ()=>{
     const v = id=>($('#ff_'+id)?.value||'').trim();
-    const rec = {sb:v('sb'), s:+v('s')||null, F:v('F'), S:v('S'), title:v('title'), detail:v('detail'),
+    const rec = {sb:v('sb'), s:+v('s')||null, grp:$('#ff_grp_sel').value, title:v('title'), detail:v('detail'),
       tambons: $('#ff_none').checked ? [] : [...picked], agency:v('agency'), budget: v('budget')===''?null:+v('budget'),
-      yearStart: v('yearStart')===''?null:+v('yearStart'), yearEnd: v('yearEnd')===''?null:+v('yearEnd'), status:v('status'), note:v('note'), ref:v('ref')};
+      yearStart: v('yearStart')===''?null:+v('yearStart'), yearEnd: v('yearEnd')===''?null:+v('yearEnd'), status:v('status'), note:v('note')};
     const miss = [];
     if(mode==='new'){ if(!v('proposer')) miss.push('ชื่อผู้เสนอ'); if(!v('proposerOrg')) miss.push('หน่วยงานผู้เสนอ'); }
-    if(!rec.sb) miss.push('ลุ่มน้ำสาขา'); if(!rec.s) miss.push('ยุทธศาสตร์'); if(!rec.F) miss.push('แผนงานหลัก'); if(!rec.S) miss.push('มาตรการ');
+    if(!rec.sb) miss.push('ลุ่มน้ำสาขา'); if(!rec.s) miss.push('ยุทธศาสตร์'); if(!rec.grp && mode!=='edit') miss.push('สภาพพื้นที่');
     if(rec.title.length<5) miss.push('ชื่อแนวทาง/โครงการ (อย่างน้อย 5 ตัวอักษร)');
     if(!$('#ff_none').checked && !rec.tambons.length) miss.push('ตำบลเป้าหมาย หรือเลือก "ไม่มีตำบลเป้าหมาย"');
     if(rec.yearStart && rec.yearEnd && rec.yearEnd<rec.yearStart) miss.push('ปีสิ้นสุดต้องไม่น้อยกว่าปีเริ่ม');
@@ -964,15 +971,15 @@ function exportXlsx(list, name){
   if(!window.XLSX){ toast('ยังโหลดตัวส่งออกไม่เสร็จ ลองใหม่อีกครั้ง'); return; }
   list = list || filt(P);
   const rows = list.map(p=>{ const L = projLoc(p); const G = projGrpList(p); return {
-    'รหัส':p.id,'ยุทธศาสตร์':`${p.s} ${STRAT[p.s]?.short||''}`,'แผนงาน':String(p.F).split(/,\s*/).map(f=>`${f} ${PROG[f]?.name||''}`).join('; '),'มาตรการ':`${p.S} ${MEAS[p.S]?.name||''}`,
+    'รหัส':p.id,'ยุทธศาสตร์':`${p.s} ${STRAT[p.s]?.short||''}`,'แผนงาน':p.F?String(p.F).split(/,\s*/).map(f=>`${f} ${PROG[f]?.name||''}`).join('; '):'','มาตรการ':p.S?`${p.S} ${MEAS[p.S]?.name||''}`:'','สภาพพื้นที่ (ผู้เสนอระบุ)':p.grp?`${p.grp} ${M.groups[p.grp]||''}`:'',
     'แนวทาง/โครงการ':p.title,'รายละเอียด':p.detail,'ลุ่มน้ำสาขา':p.sb,
     'จังหวัด':L.prov.join(', '),'อำเภอ':L.amp.join(', '),'ตำบล':L.tam.join(', ')||'ไม่มีตำบลเป้าหมาย (ระดับลุ่มน้ำ)',
     'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
-    'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
+    'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(p.grp?'ผู้เสนอระบุ':G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
     'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':stageOf(p),'หมายเหตุ':p.note,
     }; });
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [8,22,30,40,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24].map(w=>({wch:w}));
+  ws['!cols'] = [8,22,30,40,30,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24].map(w=>({wch:w}));
   ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:Object.keys(rows[0]||{a:1}).length-1}})};
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'โครงการ');
   const fn = ('โครงการ_' + String(name||'ลุ่มน้ำปิง').replace(/^โครงการ(ที่ลง|ใน)?\s*/,'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,'_').slice(0,90);

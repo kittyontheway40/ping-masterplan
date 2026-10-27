@@ -18,7 +18,7 @@ service cloud.firestore {
     // กล่องรอพิจารณา: ใครก็ส่งได้ แต่อ่าน/แก้/ลบได้เฉพาะผู้ดูแล
     match /submissions/{id} {
       allow create: if request.resource.data.review == 'pending'
-        && request.resource.data.keys().hasOnly(['sb','ref','s','F','S','title','detail','tambons','agency','budget',
+        && request.resource.data.keys().hasOnly(['sb','ref','s','F','S','grp','title','detail','tambons','agency','budget',
              'yearStart','yearEnd','status','note','proposer','proposerOrg','proposerContact','review','createdAt'])
         && request.resource.data.title is string
         && request.resource.data.title.size() >= 5 && request.resource.data.title.size() <= 300
