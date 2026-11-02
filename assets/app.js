@@ -20,7 +20,7 @@ const S = {
   tab:'area', prov:null, amp:null, tam:null, basin:null,
   f:{q:'', s:new Set(), F:'', S:'', grp:'', src:'', stage:''},
   admin:false, user:null, seedFallback:false,
-  adminTab:'pending', sel:new Set()
+  adminTab:'pending', sel:new Set(), sort:{k:'date', d:-1}
 };
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
@@ -810,16 +810,13 @@ function mapPick(id, noZoom, noPopup, latlng){
 function subLoc(x){ const ts=(x.tambons||[]).map(id=>T[id]).filter(Boolean); const u=a=>[...new Set(a)]; return {p:u(ts.map(t=>t.p)), a:u(ts.map(t=>t.a)), t:ts.map(t=>t.t)}; }
 function subErrs(x){ return validateRec(subToVal(x), {proposer:true, legacy:true, allowNoGrp: !x.grp && !!(x.F||x.S)}); }
 function adminInbox(){
-  const tab=S.adminTab, list = tab==='rejected' ? REJ : SUBS;
+  const tab=S.adminTab, list = sortSubs(tab==='rejected' ? REJ : SUBS, tab);
   [...S.sel].forEach(id=>{ if(!list.some(x=>x._id===id)) S.sel.delete(id); });
   const nSel=S.sel.size, allSel = list.length && list.every(x=>S.sel.has(x._id));
   const dt = v => { const t=tsOf(v); return t ? new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})+'<br><span class="sub">'+new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+'</span>' : ''; };
   const rows = list.map((x,i)=>{ const L=subLoc(x), errs = tab==='pending' ? subErrs(x) : [], id=esc(x._id);
     const chk = errs.length ? `<span class="vbad" title="${esc(errs.map(e=>`${FIELD_LABEL[e.f]}: ${e.msg}`).join('\n'))}">⚠ ${errs.length} จุด</span><div class="verr">${errs.slice(0,3).map(e=>`<div>• <b>${esc(FIELD_LABEL[e.f])}</b> ${esc(e.msg)}</div>`).join('')}${errs.length>3?`<div class="sub">…และอีก ${errs.length-3} จุด</div>`:''}</div>` : '<span class="vok">✓ ครบถ้วน</span>';
-    const acts = tab==='pending'
-      ? `<button class="btn sm primary" data-act="approve" data-sid="${id}" ${errs.length?'disabled title="มีข้อผิดพลาด กด “ตรวจ/แก้ไข” ก่อนอนุมัติ"':''}>อนุมัติ</button><button class="btn sm" data-act="review" data-sid="${id}">ตรวจ/แก้ไข</button><button class="btn sm danger" data-act="reject" data-sid="${id}">ไม่อนุมัติ</button>`
-      : `<button class="btn sm" data-act="restore" data-sid="${id}">นำกลับไปพิจารณา</button>`;
-    return `<tr class="${S.sel.has(x._id)?'rsel':''} ${errs.length?'rbad':''}">
+    return `<tr class="${S.sel.has(x._id)?'rsel':''} ${errs.length?'rbad':''}" data-act="selrow" data-sid="${id}">
       <td class="cchk"><input type="checkbox" data-act="selsub" data-sid="${id}" ${S.sel.has(x._id)?'checked':''} aria-label="เลือกแถว ${i+1}"></td>
       <td class="num sub">${i+1}</td>
       <td class="num">${dt(tab==='rejected'?x.reviewedAt:x.createdAt)}</td>
@@ -833,12 +830,14 @@ function adminInbox(){
       <td>${esc(LEGACY[x.status]||x.status||'')}</td>
       <td>${propLine(x)}${x.proposerContact?`<div class="sub">${esc(x.proposerContact)}</div>`:''}</td>
       ${tab==='pending'?`<td class="vcol">${chk}</td>`:`<td>${esc(x.reason||'–')}</td><td class="sub">${esc(x.reviewedBy||'')}</td>`}
-      <td class="acts-c">${acts}</td></tr>`; }).join('');
-  const head = `<tr><th class="cchk"><input type="checkbox" data-act="selall" ${allSel?'checked':''} aria-label="เลือกทั้งหมด"></th><th>#</th><th>${tab==='rejected'?'วันที่ไม่อนุมัติ':'วันที่ส่ง'}</th><th>ชื่อแนวทาง/โครงการ</th><th>ยศ.</th><th>สภาพพื้นที่</th><th>จังหวัด</th><th>อำเภอ</th><th>ตำบล</th><th>หน่วยงานรับผิดชอบ</th><th>งบประมาณ (บาท)</th><th>ปี พ.ศ.</th><th>สถานะ</th><th>ผู้เสนอ</th>${tab==='pending'?'<th>ผลตรวจข้อมูล</th>':'<th>เหตุผลที่ไม่อนุมัติ</th><th>ผู้พิจารณา</th>'}<th>จัดการ</th></tr>`;
+</tr>`; }).join('');
+  const sh = (k,lbl)=>{ const on=S.sort.k===k; return `<th class="sortable${on?' on':''}" aria-sort="${on?(S.sort.d>0?'ascending':'descending'):'none'}"><button type="button" data-act="sortsub" data-v="${k}" title="กดเพื่อเรียงลำดับ">${lbl}<span class="sarr">${on?(S.sort.d>0?'▲':'▼'):'↕'}</span></button></th>`; };
+  const head = `<tr><th class="cchk"><input type="checkbox" data-act="selall" ${allSel?'checked':''} aria-label="เลือกทั้งหมด"></th><th>#</th>${sh('date',tab==='rejected'?'วันที่ไม่อนุมัติ':'วันที่ส่ง')}${sh('title','ชื่อแนวทาง/โครงการ')}${sh('s','ยศ.')}${sh('grp','สภาพพื้นที่')}${sh('prov','จังหวัด')}${sh('amp','อำเภอ')}${sh('tam','ตำบล')}${sh('agency','หน่วยงานรับผิดชอบ')}${sh('budget','งบประมาณ (บาท)')}${sh('year','ปี พ.ศ.')}${sh('status','สถานะ')}${sh('proposer','ผู้เสนอ')}${tab==='pending'?sh('check','ผลตรวจข้อมูล'):sh('reason','เหตุผลที่ไม่อนุมัติ')+sh('reviewer','ผู้พิจารณา')}</tr>`;
   const nBad = tab==='pending' ? SUBS.filter(x=>subErrs(x).length).length : 0;
-  const tools = tab==='pending'
-    ? `<button class="btn sm primary" data-act="approvesel" ${nSel?'':'disabled'}>อนุมัติที่เลือก${nSel?` (${nSel})`:''}</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>ไม่อนุมัติที่เลือก${nSel?` (${nSel})`:''}</button>`
-    : `<button class="btn sm" data-act="restoresel" ${nSel?'':'disabled'}>นำกลับไปพิจารณาที่เลือก${nSel?` (${nSel})`:''}</button>`;
+  const selBad = tab==='pending' ? SUBS.filter(x=>S.sel.has(x._id) && subErrs(x).length).length : 0;
+  const tools = `<span class="isel">${nSel?`เลือกแล้ว <b>${nSel}</b> รายการ`:'ติ๊กเลือกรายการในตาราง แล้วกดปุ่มจัดการ'}</span>` + (tab==='pending'
+    ? `<button class="btn sm primary" data-act="approvesel" ${nSel&&nSel>selBad?'':'disabled'}>✓ อนุมัติ${nSel?` (${nSel-selBad})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'} title="เลือก 1 รายการเพื่อตรวจ/แก้ไข">✎ ตรวจ/แก้ไข</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>${selBad?`<span class="vbad sub">${selBad} รายการที่เลือกมีข้อมูลต้องแก้ไข จะยังไม่ถูกอนุมัติ</span>`:''}`
+    : `<button class="btn sm primary" data-act="restoresel" ${nSel?'':'disabled'}>↩ นำกลับไปพิจารณา${nSel?` (${nSel})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'}>ดูรายละเอียด</button>`);
   return `<div class="sec-h" style="margin-top:0"><h2>คัดกรองโครงการที่เสนอเข้ามา</h2><span class="note">โครงการจะแสดงให้ทุกคนเห็นเมื่อผู้ดูแลอนุมัติแล้วเท่านั้น</span></div>
   <div class="itabs" role="tablist"><button class="itab" role="tab" data-act="subtab" data-v="pending" aria-selected="${tab==='pending'}">กล่องรอพิจารณา <b>${SUBS.length}</b></button><button class="itab rej" role="tab" data-act="subtab" data-v="rejected" aria-selected="${tab==='rejected'}">ถังโครงการที่ไม่ผ่านอนุมัติ <b>${REJ.length}</b></button></div>
   <div class="ibox">
@@ -847,6 +846,16 @@ function adminInbox(){
   : `<div class="empty">${tab==='pending'?'ไม่มีโครงการรอพิจารณา':'ยังไม่มีโครงการที่ไม่ผ่านอนุมัติ'}</div>`}
   ${tab==='rejected'&&list.length?'<div class="note" style="margin-top:6px">โครงการในถังนี้ไม่แสดงในระบบ กด “นำกลับไปพิจารณา” เพื่อย้ายกลับไปกล่องรอพิจารณา</div>':''}
   </div>`;
+}
+function sortSubs(list, tab){
+  const {k,d}=S.sort; const L=x=>subLoc(x);
+  const val = x => ({date: tsOf(tab==='rejected'?x.reviewedAt:x.createdAt), title:x.title||'', s:+x.s||null, grp: x.grp ? 'WPREG'.indexOf(x.grp[0])*100+ +x.grp.slice(1) : null,
+    prov:L(x).p.join(', '), amp:L(x).a.join(', '), tam:L(x).t.join(', '), agency:x.agency||'', budget: x.budget==null||x.budget===''?null:+x.budget, year:+x.yearStart||+x.yearEnd||null,
+    status: STATUS_OPTS.indexOf(LEGACY[x.status]||x.status)>=0 ? STATUS_OPTS.indexOf(LEGACY[x.status]||x.status) : null, proposer:(x.proposer||'')+' '+(x.proposerOrg||''),
+    check: subErrs(x).length, reason:x.reason||'', reviewer:x.reviewedBy||''})[k];
+  const emp = v => v==null || v==='' || (typeof v==='number' && Number.isNaN(v));
+  return [...list].sort((a,b)=>{ const va=val(a), vb=val(b); if(emp(va)&&emp(vb)) return 0; if(emp(va)) return 1; if(emp(vb)) return -1;
+    return (typeof va==='number' && typeof vb==='number' ? va-vb : String(va).localeCompare(String(vb),'th')) * d; });
 }
 function openRejectModal(list){
   const QUICK=['ข้อมูลไม่ครบถ้วน','อยู่นอกขอบเขตลุ่มน้ำปิง','ซ้ำกับโครงการที่มีอยู่แล้ว','ไม่สอดคล้องกับยุทธศาสตร์/สภาพพื้นที่','ข้อมูลไม่ถูกต้อง'];
@@ -1362,6 +1371,9 @@ function bind(){
       case 'review': { const s=sub(); openForm('review', s, s); break; }
       case 'reject': openRejectModal([sub()]); break;
       case 'subtab': S.adminTab=v; S.sel.clear(); renderView(); break;
+      case 'sortsub': { S.sort = S.sort.k===v ? {k:v, d:-S.sort.d} : {k:v, d:(v==='date'?-1:1)}; renderView(); break; }
+      case 'reviewsel': { const list=S.adminTab==='rejected'?REJ:SUBS; const s=list.find(x=>S.sel.has(x._id)); if(s) openForm('review', s, s); break; }
+      case 'selrow': { if(window.getSelection()?.toString()) break; const id=a.dataset.sid; S.sel.has(id)?S.sel.delete(id):S.sel.add(id); renderView(); break; }
       case 'selsub': { a.checked?S.sel.add(a.dataset.sid):S.sel.delete(a.dataset.sid); renderView(); break; }
       case 'selall': { const list=S.adminTab==='rejected'?REJ:SUBS; if(a.checked) list.forEach(x=>S.sel.add(x._id)); else S.sel.clear(); renderView(); break; }
       case 'rejectsel': { const list=SUBS.filter(x=>S.sel.has(x._id)); if(list.length) openRejectModal(list); break; }

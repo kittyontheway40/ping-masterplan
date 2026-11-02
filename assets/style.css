@@ -501,3 +501,17 @@ td.grp{min-width:130px}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .itbl td.num,.itbl td:nth-child(13){white-space:nowrap}
 .itbl td:nth-child(14){min-width:150px}
+/* v4.7 เรียงลำดับคอลัมน์ + แถบจัดการด้านบน */
+.itbl th.sortable{padding:0}
+.itbl th.sortable button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:4px;width:100%;padding:8px 10px;cursor:pointer;color:#fff;font-weight:600;white-space:nowrap}
+.itbl th.sortable button:hover{background:rgba(255,255,255,.1)}
+.itbl th.sortable button:focus-visible{outline:2px solid var(--pink);outline-offset:-2px}
+.itbl th.sortable .sarr{font-size:.72rem;opacity:.55}
+.itbl th.sortable.on{background:#2c4f8c}
+.itbl th.sortable.on .sarr{opacity:1;color:#ffd0e3}
+.itools{position:sticky;top:0;z-index:3;background:#fff;padding:8px 0;border-bottom:1px solid var(--line)}
+.itools .isel{font-size:.86rem;color:var(--muted,#5a6b85);margin-right:4px}
+.itools .isel b{color:var(--pink)}
+.itbl tbody tr{cursor:pointer}
+.itbl tbody tr:hover td{background:#f7f9fd}
+.itbl tr.rsel:hover td,.itbl tr.rsel td{background:#fdf2f7}
