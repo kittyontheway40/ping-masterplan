@@ -1055,7 +1055,7 @@ function openForm(mode, data={}, sub=null){
       <div class="fld"><label for="ff_budget">งบประมาณ (บาท)</label><input id="ff_budget" inputmode="decimal" placeholder="เช่น 250,000" value="${d.budget!=null&&d.budget!==''?toBaht(d.budget).toLocaleString('en-US'):''}"><div class="note" id="ff_budgetHint"></div></div>
       <div class="fld"><label for="ff_yearStart">ปีเริ่ม (พ.ศ.)</label><input id="ff_yearStart" type="number" min="2560" max="2600" value="${esc(d.yearStart??'')}"></div>
       <div class="fld"><label for="ff_yearEnd">ปีสิ้นสุด (พ.ศ.)</label><input id="ff_yearEnd" type="number" min="2560" max="2600" value="${esc(d.yearEnd??'')}"></div>
-      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${((LEGACY[d.status]||d.status)||(mode==='new'?'เตรียมการ':''))===o?'selected':''}>${o}</option>`).join('')}</select><div class="note" id="ff_statusHint"></div></div>
+      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${((LEGACY[d.status]||d.status)||(mode==='new'?'เตรียมการ':''))===o?'selected':''}>${o}</option>`).join('')}</select></div>
       <div class="fld full"><label for="ff_note">หมายเหตุ</label><input id="ff_note" value="${esc(d.note)}"></div>
     </div>
     <div class="err" id="ff_err" role="alert"></div>
@@ -1122,8 +1122,6 @@ function openForm(mode, data={}, sub=null){
   fillT();
 
   /* คำแนะนำสถานะ + งบประมาณ */
-  const stHint = ()=>{ const v=$('#ff_status').value; $('#ff_statusHint').textContent = v ? STATUS_HELP[v]||'' : 'โครงการที่ยื่นเสนอใหม่ (ยังไม่เริ่ม) ให้เลือก “เตรียมการ”'; };
-  $('#ff_status').addEventListener('change', stHint); stHint();
   const bHint = ()=>{ const b=parseBaht($('#ff_budget').value); $('#ff_budgetHint').textContent = (b && !Number.isNaN(b)) ? `= ${b.toLocaleString('th-TH')} บาท${b>=1e6?` (${(b/1e6).toLocaleString('th-TH',{maximumFractionDigits:2})} ล้านบาท)`:''}` : ''; };
   $('#ff_budget').addEventListener('input', bHint); $('#ff_budget').addEventListener('blur', ()=>{ const b=parseBaht($('#ff_budget').value); if(b!=null && !Number.isNaN(b)) $('#ff_budget').value=b.toLocaleString('en-US'); bHint(); }); bHint();
   /* แสดงข้อผิดพลาดรายช่อง */
