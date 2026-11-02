@@ -19,7 +19,8 @@ service cloud.firestore {
     match /submissions/{id} {
       allow create: if request.resource.data.review == 'pending'
         && request.resource.data.keys().hasOnly(['sb','ref','s','F','S','grp','title','detail','tambons','agency','budget',
-             'yearStart','yearEnd','status','note','proposer','proposerOrg','proposerContact','review','createdAt'])
+             'yearStart','yearEnd','status','note','proposer','proposerOrg','proposerContact','review','createdAt',
+             'track','trackKey','resubmitOf','prevReason'])
         && request.resource.data.title is string
         && request.resource.data.title.size() >= 5 && request.resource.data.title.size() <= 300
         && request.resource.data.detail.size() <= 3000
@@ -28,6 +29,27 @@ service cloud.firestore {
         && request.resource.data.proposerOrg is string && request.resource.data.proposerOrg.size() > 0
         && request.resource.data.createdAt == request.time;
       allow read, update, delete: if isAdmin();
+    }
+
+    // เลขติดตามโครงการ: ใครมีเลขก็เปิดดูได้ (ห้ามดึงรายการทั้งหมด) · ผู้เสนอสร้างตอนส่ง และแก้ไขส่งใหม่ได้เฉพาะรายการที่ถูกส่งกลับ/ไม่อนุมัติ
+    match /track/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.resource.data.keys().hasOnly(['items','createdAt'])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.items is map && request.resource.data.items.size() <= 300;
+      allow update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['items','createdAt','rk'])
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.rk is string
+        && request.resource.data.items.diff(resource.data.items).affectedKeys().hasOnly([request.resource.data.rk])
+        && resource.data.items[request.resource.data.rk].review in ['revise','rejected']
+        && (resource.data.items[request.resource.data.rk].review == 'rejected'
+            || request.time < resource.data.items[request.resource.data.rk].deadline)
+        && request.resource.data.items[request.resource.data.rk].review == 'pending'
+        && request.resource.data.items[request.resource.data.rk].projectId == ''
+      );
+      allow delete: if isAdmin();
     }
 
     // รายชื่อผู้ดูแล: แต่ละคนอ่านได้เฉพาะของตัวเอง, ห้ามเขียนจากหน้าเว็บ

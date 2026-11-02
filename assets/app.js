@@ -14,7 +14,7 @@ const SHEX = {1:'#2f7fc1',2:'#4c9a56',3:'#d0862a',4:'#23938a',5:'#7656a8'};
 const TGHEX = '#e07b39';
 const PAGE = 40;
 
-let M, T = {}, P = [], SEED = [], SUBS = [], REJ = [], AUDIT = [];
+let M, T = {}, P = [], SEED = [], SUBS = [], REJ = [], REV = [], AUDIT = [];
 let IDX = {byTam:{}, byBasin:{}}, MEAS = {}, PROG = {}, STRAT = {}, BAS = {};
 const S = {
   tab:'area', prov:null, amp:null, tam:null, basin:null,
@@ -41,6 +41,15 @@ function toast(msg){
   const el = document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el);
   setTimeout(()=>el.remove(), 3200);
 }
+/* ---------- เลขติดตามโครงการ ---------- */
+const TRACK_DAYS = 30;                       // ส่งกลับให้แก้ไข: ต้องแก้ภายในกี่วัน ไม่เช่นนั้นปิดเรื่องอัตโนมัติ
+const TRACK_CONTACT = {name:'admin', email:'chidsumons@gmail.com'};   // ติดต่อเมื่อทำเลขติดตามหาย
+const TRACK_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function genCode(){ const a=new Uint32Array(8); crypto.getRandomValues(a); const c=[...a].map(n=>TRACK_ABC[n%TRACK_ABC.length]).join(''); return `PING-${c.slice(0,4)}-${c.slice(4)}`; }
+function normCode(v){ const t=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/^PING/,''); return t.length===8 ? `PING-${t.slice(0,4)}-${t.slice(4)}` : ''; }
+const TRACK_FIELDS = ['title','detail','s','grp','tambons','agency','budget','yearStart','yearEnd','status','note','proposer','proposerOrg'];
+function trackItem(r, sub, now){ const o={sub, review:'pending', reason:'', deadline:null, projectId:'', at:now}; TRACK_FIELDS.forEach(k=>o[k]= r[k]??(k==='tambons'?[]:k==='s'||k==='budget'||k==='yearStart'||k==='yearEnd'?null:'')); return o; }
+const daysLeft = dl => Math.ceil((tsOf(dl)-Date.now())/86400000);
 function normSub(o){ if(!o.grp && /^grp:/.test(o.ref||'')){ o.grp=o.ref.slice(4); o.ref=''; } return o; }
 const tsOf = x => x?.seconds ? x.seconds*1000 : (typeof x==='number' ? x : (x ? Date.parse(x)||0 : 0));
 function normProj(p){
@@ -72,8 +81,10 @@ const Store = {
     P = SEED.filter(p=>!o.deleted.includes(p.id)).map(p=> normProj(o.edited[p.id] || p)).concat(o.added.map(normProj));
     SUBS = LS.get('ping_subs', []).filter(s=>s.review==='pending');
     REJ = LS.get('ping_subs', []).filter(s=>s.review==='rejected').sort((a,b)=>tsOf(b.reviewedAt)-tsOf(a.reviewedAt));
+    REV = LS.get('ping_subs', []).filter(s=>s.review==='revise').sort((a,b)=>tsOf(a.deadline)-tsOf(b.deadline));
     AUDIT = LS.get('ping_audit', []);
     const ss = Sess.get(); if(ss && ss.role==='admin'){ S.admin=true; S.user={email: ss.name || 'ผู้ดูแลระบบ'}; }
+    if(S.admin && !this._hk){ this._hk=1; setTimeout(()=>{ this.housekeep(); this._hk=0; }, 0); }
     onData();
   },
   demoSave(fn){ const o = LS.get('ping_overrides', {edited:{}, added:[], deleted:[]}); fn(o); LS.set('ping_overrides', o); this.initDemo(); },
@@ -93,8 +104,9 @@ const Store = {
         try{ await this.db.collection('submissions').limit(1).get(); S.admin = true; }catch(e){ S.admin=false; S.permErr = e.code||e.message; }
         if(!S.admin){ toast('บัญชีนี้ยังไม่ได้รับสิทธิ์ผู้ดูแลระบบ'); }
         else {
-          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.createdAt)-tsOf(a.createdAt)); renderHeader(); if(S.tab==='admin') renderView(); }));
-          this.unsub.push(this.db.collection('submissions').where('review','==','rejected').onSnapshot(s=>{ REJ = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.reviewedAt)-tsOf(a.reviewedAt)); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.createdAt)-tsOf(a.createdAt)); this.housekeep(); renderHeader(); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','rejected').onSnapshot(s=>{ REJ = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.reviewedAt)-tsOf(a.reviewedAt)); this.housekeep(); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','revise').onSnapshot(s=>{ REV = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(a.deadline)-tsOf(b.deadline)); this.housekeep(); renderHeader(); if(S.tab==='admin') renderView(); }));
           this.unsub.push(this.db.collection('audit').orderBy('ts','desc').limit(60).onSnapshot(s=>{ AUDIT = s.docs.map(d=>d.data()); if(S.tab==='admin') renderView(); }));
         }
       }
@@ -112,26 +124,99 @@ const Store = {
   },
   async logout(){ if(this.mode==='demo'){ S.admin=false; S.user=null; renderHeader(); renderView(); return; } await this.auth.signOut(); },
   async resetPassword(email){ if(this.mode==='demo') throw new Error('โหมดทดลองไม่มีระบบรีเซ็ตรหัสผ่าน'); await this.auth.sendPasswordResetEmail(email); },
-  async submit(data){
-    const rec = Object.assign({}, data, {review:'pending'});
+  async submit(data){ return this.submitTracked([data]); },
+  async submitMany(list){ return this.submitTracked(list); },
+  // ส่งโครงการพร้อมสร้างเลขติดตาม (1 เลขต่อการส่ง 1 ครั้ง ไม่ว่าจะ 1 หรือหลายโครงการ)
+  async submitTracked(list){
+    const code=genCode();
     if(this.mode==='demo'){
-      rec._id = 'S'+Date.now(); rec.createdAt = {seconds: Math.floor(Date.now()/1000)};
-      const a = LS.get('ping_subs', []); a.unshift(rec); LS.set('ping_subs', a); SUBS = a.filter(s=>s.review==='pending'); renderHeader(); return;
+      const a=LS.get('ping_subs', []), now=Date.now(), items={};
+      list.forEach((r,i)=>{ const k=String(i+1), id='S'+now+'_'+i; a.unshift(Object.assign({}, r, {review:'pending', _id:id, createdAt:{seconds:Math.floor(now/1000)}, track:code, trackKey:k})); items[k]=trackItem(r, id, now); });
+      LS.set('ping_subs', a); const tr=LS.get('ping_track', {}); tr[code]={createdAt:now, items}; LS.set('ping_track', tr);
+      SUBS=a.filter(s=>s.review==='pending'); renderHeader(); return code;
     }
-    rec.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    try{ await this.db.collection('submissions').add(rec); }
-    catch(e){
-      // กฎ Firestore รุ่นเก่ายังไม่รู้จักช่อง grp → เก็บไว้ในช่อง ref แทน
-      if(rec.grp && /permission/i.test(e.code||e.message)){ const r2=Object.assign({}, rec, {ref:'grp:'+rec.grp}); delete r2.grp; await this.db.collection('submissions').add(r2); }
-      else throw e;
-    }
+    const ts=firebase.firestore.FieldValue.serverTimestamp(), b=this.db.batch(), items={};
+    list.forEach((r,i)=>{ const k=String(i+1), ref=this.db.collection('submissions').doc(); b.set(ref, Object.assign({}, r, {review:'pending', createdAt:ts, track:code, trackKey:k})); items[k]=trackItem(r, ref.id, ts); });
+    b.set(this.db.doc('track/'+code), {createdAt:ts, items});
+    try{ await b.commit(); return code; }
+    catch(e){ if(!/permission/i.test(e.code||e.message)) throw e; console.warn('track rules not published yet', e); await this.submitPlain(list); return null; }
   },
-  async submitMany(list){
-    if(this.mode==='demo'){ const a = LS.get('ping_subs', []); list.forEach((r,i)=>a.unshift(Object.assign({}, r, {review:'pending', _id:'S'+Date.now()+'_'+i, createdAt:{seconds:Math.floor(Date.now()/1000)}}))); LS.set('ping_subs', a); SUBS=a.filter(s=>s.review==='pending'); renderHeader(); return; }
+  // ส่งแบบไม่มีเลขติดตาม (ใช้เมื่อกฎ Firestore ยังไม่เปิดคอลเลกชัน track)
+  async submitPlain(list){
     const write = async (enc)=>{ for(let i=0;i<list.length;i+=400){ const b=this.db.batch();
       list.slice(i,i+400).forEach(r=>{ let o=Object.assign({}, r, {review:'pending', createdAt:firebase.firestore.FieldValue.serverTimestamp()}); if(enc && o.grp){ o.ref='grp:'+o.grp; delete o.grp; } b.set(this.db.collection('submissions').doc(), o); });
       await b.commit(); } };
     try{ await write(false); }catch(e){ if(/permission/i.test(e.code||e.message)) await write(true); else throw e; }
+  },
+  async getTrack(code){
+    let doc;
+    if(this.mode==='demo'){ doc=LS.get('ping_track', {})[code]; if(!doc) return null; }
+    else { const d=await this.db.doc('track/'+code).get(); if(!d.exists) return null; doc=d.data(); }
+    const items=Object.entries(doc.items||{}).map(([k,v])=>Object.assign({k}, v)).sort((a,b)=>+a.k-+b.k);
+    if(this.mode==='firebase'){  // ยืนยันว่าโครงการที่ขึ้นว่าอนุมัติ มีอยู่จริงในระบบ
+      await Promise.all(items.filter(x=>x.review==='approved').map(async x=>{ try{ const pd=await this.db.doc('projects/'+x.projectId).get(); if(!pd.exists || pd.data().track!==code) x.review='pending'; }catch(e){ x.review='pending'; } }));
+    }
+    return {code, createdAt:doc.createdAt, items};
+  },
+  async resubmit(code, k, rec, prev){
+    if(this.mode==='demo'){
+      const a=LS.get('ping_subs', []), now=Date.now(), id='S'+now+'_r';
+      a.unshift(Object.assign({}, rec, {review:'pending', _id:id, createdAt:{seconds:Math.floor(now/1000)}, track:code, trackKey:k, resubmitOf:prev.sub||'', prevReason:prev.reason||''}));
+      LS.set('ping_subs', a); const tr=LS.get('ping_track', {}); tr[code].items[k]=trackItem(rec, id, now); LS.set('ping_track', tr); SUBS=a.filter(s=>s.review==='pending'); renderHeader(); return;
+    }
+    const ts=firebase.firestore.FieldValue.serverTimestamp(), b=this.db.batch(), ref=this.db.collection('submissions').doc();
+    b.set(ref, Object.assign({}, rec, {review:'pending', createdAt:ts, track:code, trackKey:k, resubmitOf:prev.sub||'', prevReason:prev.reason||''}));
+    b.update(this.db.doc('track/'+code), {['items.'+k]: trackItem(rec, ref.id, ts), rk:k});
+    await b.commit();
+  },
+  // อัปเดตสถานะในเลขติดตาม (แยกจากการบันทึกหลัก เพื่อไม่ให้การอนุมัติล้มเหลวถ้าโครงการเก่าไม่มีเลขติดตาม)
+  async trackUpdate(pairs){
+    pairs=pairs.filter(([x])=>x && x.track && x.trackKey); if(!pairs.length) return;
+    if(this.mode==='demo'){ const tr=LS.get('ping_track', {}); pairs.forEach(([x,f])=>{ const it=tr[x.track]?.items?.[x.trackKey]; if(it) Object.assign(it, f, {at:Date.now()}); }); LS.set('ping_track', tr); return; }
+    try{ for(let i=0;i<pairs.length;i+=400){ const b=this.db.batch();
+      pairs.slice(i,i+400).forEach(([x,f])=>{ const u={}; Object.entries(Object.assign({}, f, {at:firebase.firestore.FieldValue.serverTimestamp()})).forEach(([kk,v])=>u[`items.${x.trackKey}.${kk}`]=v); b.update(this.db.doc('track/'+x.track), u); });
+      await b.commit(); } }catch(e){ console.warn('track update failed', e); }
+  },
+  // ส่งกลับให้แก้ไข (กำหนดแก้ภายใน TRACK_DAYS วัน)
+  async reviseMany(list, reason){
+    const dlMs=Date.now()+TRACK_DAYS*86400000;
+    if(this.mode==='demo'){
+      const a=LS.get('ping_subs', []), ids=new Set(list.map(x=>x._id));
+      a.forEach(s=>{ if(ids.has(s._id)){ s.review='revise'; s.reason=reason; s.reviewedBy=S.user?.email||'ผู้ดูแลระบบ'; s.reviewedAt=Date.now(); s.deadline=dlMs; } }); LS.set('ping_subs', a);
+      list.forEach(x=>this.demoAudit('ส่งกลับให้แก้ไข', x._id, x.title+' — '+reason));
+      await this.trackUpdate(list.map(x=>[x,{review:'revise', reason, deadline:dlMs}])); this.initDemo(); return;
+    }
+    const dl=firebase.firestore.Timestamp.fromMillis(dlMs);
+    for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
+      list.slice(i,i+200).forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'revise', reason, reviewedBy:S.user.email, reviewedAt:firebase.firestore.FieldValue.serverTimestamp(), deadline:dl});
+        b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ส่งกลับให้แก้ไข', id:x._id, detail:x.title+' — '+reason}); });
+      await b.commit(); }
+    await this.trackUpdate(list.map(x=>[x,{review:'revise', reason, deadline:dl}]));
+  },
+  // งานดูแลอัตโนมัติ (ทำเมื่อผู้ดูแลเปิดระบบ): ปิดเรื่องที่เกินกำหนดแก้ไข และซ่อนรายการเดิมที่ผู้เสนอส่งแก้ไขกลับมาแล้ว
+  _hkDone: new Set(),
+  async housekeep(){
+    if(!S.admin) return;
+    const now=Date.now();
+    const resubIds=new Set(SUBS.map(x=>x.resubmitOf).filter(Boolean));
+    const done=[...REV, ...REJ].filter(x=>resubIds.has(x._id) && !this._hkDone.has(x._id));
+    const expired=REV.filter(x=>tsOf(x.deadline) && tsOf(x.deadline)<now && !resubIds.has(x._id) && !this._hkDone.has(x._id));
+    if(!done.length && !expired.length) return;
+    [...done, ...expired].forEach(x=>this._hkDone.add(x._id));
+    const closeReason = x => `ปิดเรื่องอัตโนมัติ: ไม่ได้แก้ไขภายใน ${TRACK_DAYS} วัน${x.reason?` (สิ่งที่ขอให้แก้: ${x.reason})`:''}`;
+    try{
+      if(this.mode==='demo'){
+        const a=LS.get('ping_subs', []);
+        a.forEach(s=>{ if(done.some(x=>x._id===s._id)) s.review='resubmitted'; const e=expired.find(x=>x._id===s._id); if(e){ s.review='rejected'; s.autoClosed=true; s.reason=closeReason(e); s.reviewedAt=now; } });
+        LS.set('ping_subs', a); await this.trackUpdate(expired.map(x=>[x,{review:'closed', reason:closeReason(x)}])); this.initDemo(); return;
+      }
+      const b=this.db.batch();
+      done.forEach(x=>b.update(this.db.doc('submissions/'+x._id), {review:'resubmitted'}));
+      expired.forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'rejected', autoClosed:true, reason:closeReason(x), reviewedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:'ระบบ', action:'ปิดเรื่องอัตโนมัติ', id:x._id, detail:x.title}); });
+      await b.commit();
+      await this.trackUpdate(expired.map(x=>[x,{review:'closed', reason:closeReason(x)}]));
+    }catch(e){ console.warn('housekeep', e); }
   },
   nextId(){ const mx = P.reduce((m,p)=>Math.max(m, p.seq||0), 0); return {seq:mx+1, id:'P'+String(mx+1).padStart(4,'0')}; },
   async ensureSeeded(){
@@ -143,40 +228,43 @@ const Store = {
   async approve(sub, data, forced){
     await this.ensureSeeded();
     const {id, seq} = forced || this.nextId();
-    const proj = normProj(Object.assign({}, pickProj(data), {id, seq, src:'new', proposer:sub.proposer||'', proposerOrg:sub.proposerOrg||'', proposerContact:sub.proposerContact||'', approvedBy:S.user?.email||'', approvedAt:new Date().toISOString()}));
+    const proj = normProj(Object.assign({}, pickProj(data), {id, seq, src:'new', proposer:sub.proposer||'', proposerOrg:sub.proposerOrg||'', proposerContact:sub.proposerContact||'', track:sub.track||'', approvedBy:S.user?.email||'', approvedAt:new Date().toISOString()}));
     if(this.mode==='demo'){
       const a = LS.get('ping_subs', []); const s = a.find(x=>x._id===sub._id); if(s){ s.review='approved'; s.projectId=id; } LS.set('ping_subs', a);
       this.demoAudit('อนุมัติโครงการใหม่', id, proj.title);
+      await this.trackUpdate([[sub,{review:'approved', projectId:id, reason:''}]]);
       this.demoSave(o=>o.added.push(proj)); return id;
     }
     const b = this.db.batch();
     b.set(this.db.doc('projects/'+id), proj);
     b.update(this.db.doc('submissions/'+sub._id), {review:'approved', projectId:id, reviewedBy:S.user.email, reviewedAt:firebase.firestore.FieldValue.serverTimestamp()});
     b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'อนุมัติโครงการใหม่', id, detail:proj.title});
-    await b.commit(); return id;
+    await b.commit(); await this.trackUpdate([[sub,{review:'approved', projectId:id, reason:''}]]); return id;
   },
   async reject(sub, reason){ return this.rejectMany([sub], reason); },
   async rejectMany(list, reason){
     if(this.mode==='demo'){
       const a = LS.get('ping_subs', []); const ids=new Set(list.map(x=>x._id));
       a.forEach(s=>{ if(ids.has(s._id)){ s.review='rejected'; s.reason=reason||''; s.reviewedBy=S.user?.email||'ผู้ดูแลระบบ'; s.reviewedAt=Date.now(); } }); LS.set('ping_subs', a);
-      list.forEach(x=>this.demoAudit('ไม่อนุมัติ', x._id, x.title+(reason?' — '+reason:''))); this.initDemo(); return;
+      list.forEach(x=>this.demoAudit('ไม่อนุมัติ', x._id, x.title+(reason?' — '+reason:''))); await this.trackUpdate(list.map(x=>[x,{review:'rejected', reason:reason||''}])); this.initDemo(); return;
     }
     for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
       list.slice(i,i+200).forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'rejected', reason:reason||'', reviewedBy:S.user.email, reviewedAt:firebase.firestore.FieldValue.serverTimestamp()});
         b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ไม่อนุมัติ', id:x._id, detail:x.title+(reason?' — '+reason:'')}); });
       await b.commit(); }
+    await this.trackUpdate(list.map(x=>[x,{review:'rejected', reason:reason||''}]));
   },
   async restoreMany(list){
     if(this.mode==='demo'){
       const a = LS.get('ping_subs', []); const ids=new Set(list.map(x=>x._id));
       a.forEach(s=>{ if(ids.has(s._id)){ s.review='pending'; } }); LS.set('ping_subs', a);
-      list.forEach(x=>this.demoAudit('นำกลับไปพิจารณาใหม่', x._id, x.title)); this.initDemo(); return;
+      list.forEach(x=>this.demoAudit('นำกลับไปพิจารณาใหม่', x._id, x.title)); await this.trackUpdate(list.map(x=>[x,{review:'pending', reason:'', deadline:null}])); this.initDemo(); return;
     }
     for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
       list.slice(i,i+200).forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'pending'});
         b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'นำกลับไปพิจารณาใหม่', id:x._id, detail:x.title}); });
       await b.commit(); }
+    await this.trackUpdate(list.map(x=>[x,{review:'pending', reason:'', deadline:null}]));
   },
   async approveMany(list){
     await this.ensureSeeded();
@@ -810,7 +898,7 @@ function mapPick(id, noZoom, noPopup, latlng){
 function subLoc(x){ const ts=(x.tambons||[]).map(id=>T[id]).filter(Boolean); const u=a=>[...new Set(a)]; return {p:u(ts.map(t=>t.p)), a:u(ts.map(t=>t.a)), t:ts.map(t=>t.t)}; }
 function subErrs(x){ return validateRec(subToVal(x), {proposer:true, legacy:true, allowNoGrp: !x.grp && !!(x.F||x.S)}); }
 function adminInbox(){
-  const tab=S.adminTab, list = sortSubs(tab==='rejected' ? REJ : SUBS, tab);
+  const tab=S.adminTab, list = sortSubs(curList(), tab);
   [...S.sel].forEach(id=>{ if(!list.some(x=>x._id===id)) S.sel.delete(id); });
   const nSel=S.sel.size, allSel = list.length && list.every(x=>S.sel.has(x._id));
   const dt = v => { const t=tsOf(v); return t ? new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})+'<br><span class="sub">'+new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+'</span>' : ''; };
@@ -819,8 +907,8 @@ function adminInbox(){
     return `<tr class="${S.sel.has(x._id)?'rsel':''} ${errs.length?'rbad':''}" data-act="selrow" data-sid="${id}">
       <td class="cchk"><input type="checkbox" data-act="selsub" data-sid="${id}" ${S.sel.has(x._id)?'checked':''} aria-label="เลือกแถว ${i+1}"></td>
       <td class="num sub">${i+1}</td>
-      <td class="num">${dt(tab==='rejected'?x.reviewedAt:x.createdAt)}</td>
-      <td class="ttl"><button class="linkbtn" data-act="${tab==='pending'?'review':'viewsub'}" data-sid="${id}">${esc(x.title||'(ไม่มีชื่อ)')}</button>${x.detail?`<div class="sub clamp2">${esc(x.detail)}</div>`:''}</td>
+      <td class="num">${dt(tab==='pending'?x.createdAt:x.reviewedAt)}${x.track?`<div class="tcode" title="เลขติดตาม">${esc(x.track)}</div>`:''}</td>
+      <td class="ttl">${x.resubmitOf?`<span class="pill resub" title="${esc(x.prevReason?'สิ่งที่ขอให้แก้ครั้งก่อน: '+x.prevReason:'ผู้เสนอแก้ไขและส่งกลับมาใหม่')}">ส่งแก้ไขแล้ว</span> `:''}${x.autoClosed?'<span class="pill closed">ปิดเรื่องอัตโนมัติ</span> ':''}<button class="linkbtn" data-act="${tab==='pending'?'review':'viewsub'}" data-sid="${id}">${esc(x.title||'(ไม่มีชื่อ)')}</button>${x.detail?`<div class="sub clamp2">${esc(x.detail)}</div>`:''}</td>
       <td>${x.s?sPill(x.s):'<span class="sub">–</span>'}</td>
       <td class="grpc">${x.grp?`<span class="gcode f${'WPREG'.indexOf(x.grp[0])+1}">${esc(x.grp)}</span> <span>${esc(M.groups[x.grp]||'')}</span>`:esc([x.F,x.S].filter(Boolean).join(' / '))||'<span class="sub">–</span>'}</td>
       <td>${esc(L.p.join(', '))}</td><td>${esc(L.a.join(', '))}</td><td class="tamc">${esc(L.t.join(', '))}</td>
@@ -829,33 +917,50 @@ function adminInbox(){
       <td class="num">${x.yearStart||x.yearEnd?`${esc(x.yearStart||'?')}–${esc(x.yearEnd||'?')}`:''}</td>
       <td>${esc(LEGACY[x.status]||x.status||'')}</td>
       <td>${propLine(x)}${x.proposerContact?`<div class="sub">${esc(x.proposerContact)}</div>`:''}</td>
-      ${tab==='pending'?`<td class="vcol">${chk}</td>`:`<td>${esc(x.reason||'–')}</td><td class="sub">${esc(x.reviewedBy||'')}</td>`}
+      ${tab==='pending'?`<td class="vcol">${chk}</td>`:tab==='revise'?`<td class="fixc">${esc(x.reason||'–')}</td><td class="num">${tsOf(x.deadline)?`${new Date(tsOf(x.deadline)).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})}<div class="${daysLeft(x.deadline)<=7?'vbad':'sub'}">${daysLeft(x.deadline)>0?`เหลือ ${daysLeft(x.deadline)} วัน`:'เกินกำหนด'}</div>`:''}</td><td class="sub">${esc(x.reviewedBy||'')}</td>`:`<td>${esc(x.reason||'–')}</td><td class="sub">${esc(x.reviewedBy||'')}</td>`}
 </tr>`; }).join('');
   const sh = (k,lbl)=>{ const on=S.sort.k===k; return `<th class="sortable${on?' on':''}" aria-sort="${on?(S.sort.d>0?'ascending':'descending'):'none'}"><button type="button" data-act="sortsub" data-v="${k}" title="กดเพื่อเรียงลำดับ">${lbl}<span class="sarr">${on?(S.sort.d>0?'▲':'▼'):'↕'}</span></button></th>`; };
-  const head = `<tr><th class="cchk"><input type="checkbox" data-act="selall" ${allSel?'checked':''} aria-label="เลือกทั้งหมด"></th><th>#</th>${sh('date',tab==='rejected'?'วันที่ไม่อนุมัติ':'วันที่ส่ง')}${sh('title','ชื่อแนวทาง/โครงการ')}${sh('s','ยศ.')}${sh('grp','สภาพพื้นที่')}${sh('prov','จังหวัด')}${sh('amp','อำเภอ')}${sh('tam','ตำบล')}${sh('agency','หน่วยงานรับผิดชอบ')}${sh('budget','งบประมาณ (บาท)')}${sh('year','ปี พ.ศ.')}${sh('status','สถานะ')}${sh('proposer','ผู้เสนอ')}${tab==='pending'?sh('check','ผลตรวจข้อมูล'):sh('reason','เหตุผลที่ไม่อนุมัติ')+sh('reviewer','ผู้พิจารณา')}</tr>`;
+  const head = `<tr><th class="cchk"><input type="checkbox" data-act="selall" ${allSel?'checked':''} aria-label="เลือกทั้งหมด"></th><th>#</th>${sh('date',tab==='rejected'?'วันที่ไม่อนุมัติ':tab==='revise'?'วันที่ส่งกลับ':'วันที่ส่ง')}${sh('title','ชื่อแนวทาง/โครงการ')}${sh('s','ยศ.')}${sh('grp','สภาพพื้นที่')}${sh('prov','จังหวัด')}${sh('amp','อำเภอ')}${sh('tam','ตำบล')}${sh('agency','หน่วยงานรับผิดชอบ')}${sh('budget','งบประมาณ (บาท)')}${sh('year','ปี พ.ศ.')}${sh('status','สถานะ')}${sh('proposer','ผู้เสนอ')}${tab==='pending'?sh('check','ผลตรวจข้อมูล'):tab==='revise'?sh('reason','สิ่งที่ต้องแก้ไข')+sh('deadline','ครบกำหนดแก้ไข')+sh('reviewer','ผู้พิจารณา'):sh('reason','เหตุผลที่ไม่อนุมัติ')+sh('reviewer','ผู้พิจารณา')}</tr>`;
   const nBad = tab==='pending' ? SUBS.filter(x=>subErrs(x).length).length : 0;
   const selBad = tab==='pending' ? SUBS.filter(x=>S.sel.has(x._id) && subErrs(x).length).length : 0;
   const tools = `<span class="isel">${nSel?`เลือกแล้ว <b>${nSel}</b> รายการ`:'ติ๊กเลือกรายการในตาราง แล้วกดปุ่มจัดการ'}</span>` + (tab==='pending'
-    ? `<button class="btn sm primary" data-act="approvesel" ${nSel&&nSel>selBad?'':'disabled'}>✓ อนุมัติ${nSel?` (${nSel-selBad})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'} title="เลือก 1 รายการเพื่อตรวจ/แก้ไข">✎ ตรวจ/แก้ไข</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>${selBad?`<span class="vbad sub">${selBad} รายการที่เลือกมีข้อมูลต้องแก้ไข จะยังไม่ถูกอนุมัติ</span>`:''}`
-    : `<button class="btn sm primary" data-act="restoresel" ${nSel?'':'disabled'}>↩ นำกลับไปพิจารณา${nSel?` (${nSel})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'}>ดูรายละเอียด</button>`);
+    ? `<button class="btn sm primary" data-act="approvesel" ${nSel&&nSel>selBad?'':'disabled'}>✓ อนุมัติ${nSel?` (${nSel-selBad})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'} title="เลือก 1 รายการเพื่อตรวจ/แก้ไข">✎ ตรวจ/แก้ไข</button><button class="btn sm warn" data-act="revisesel" ${nSel?'':'disabled'}>↩ ส่งกลับให้แก้ไข${nSel?` (${nSel})`:''}</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>${selBad?`<span class="vbad sub">${selBad} รายการที่เลือกมีข้อมูลต้องแก้ไข จะยังไม่ถูกอนุมัติ</span>`:''}`
+    : `<button class="btn sm primary" data-act="restoresel" ${nSel?'':'disabled'}>↩ นำกลับไปพิจารณา${nSel?` (${nSel})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'}>ดูรายละเอียด</button>${tab==='revise'?`<button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>`:''}`);
   return `<div class="sec-h" style="margin-top:0"><h2>คัดกรองโครงการที่เสนอเข้ามา</h2><span class="note">โครงการจะแสดงให้ทุกคนเห็นเมื่อผู้ดูแลอนุมัติแล้วเท่านั้น</span></div>
-  <div class="itabs" role="tablist"><button class="itab" role="tab" data-act="subtab" data-v="pending" aria-selected="${tab==='pending'}">กล่องรอพิจารณา <b>${SUBS.length}</b></button><button class="itab rej" role="tab" data-act="subtab" data-v="rejected" aria-selected="${tab==='rejected'}">ถังโครงการที่ไม่ผ่านอนุมัติ <b>${REJ.length}</b></button></div>
+  <div class="itabs" role="tablist"><button class="itab" role="tab" data-act="subtab" data-v="pending" aria-selected="${tab==='pending'}">กล่องรอพิจารณา <b>${SUBS.length}</b></button><button class="itab fix" role="tab" data-act="subtab" data-v="revise" aria-selected="${tab==='revise'}">ส่งกลับให้แก้ไข <b>${REV.length}</b></button><button class="itab rej" role="tab" data-act="subtab" data-v="rejected" aria-selected="${tab==='rejected'}">ถังโครงการที่ไม่ผ่านอนุมัติ <b>${REJ.length}</b></button></div>
   <div class="ibox">
   ${list.length?`<div class="itools">${tools}<span class="sp"></span>${nBad?`<span class="vbad">⚠ มีข้อมูลต้องแก้ไข ${nBad} รายการ (อนุมัติไม่ได้จนกว่าจะแก้)</span>`:''}<button class="btn sm" data-act="subxls">ดาวน์โหลดรายการเป็น Excel</button></div>
   <div class="tbl-wrap itbl"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`
-  : `<div class="empty">${tab==='pending'?'ไม่มีโครงการรอพิจารณา':'ยังไม่มีโครงการที่ไม่ผ่านอนุมัติ'}</div>`}
+  : `<div class="empty">${tab==='pending'?'ไม่มีโครงการรอพิจารณา':tab==='revise'?'ไม่มีโครงการที่รอผู้เสนอแก้ไข':'ยังไม่มีโครงการที่ไม่ผ่านอนุมัติ'}</div>`}
+  ${tab==='revise'&&list.length?`<div class="note" style="margin-top:6px">ผู้เสนอแก้ไขได้ผ่านเลขติดตามภายใน ${TRACK_DAYS} วัน เมื่อส่งกลับมา รายการจะเข้ากล่องรอพิจารณาพร้อมป้าย “ส่งแก้ไขแล้ว” · ถ้าเกินกำหนด ระบบจะปิดเรื่องและย้ายไปถังไม่ผ่านอนุมัติอัตโนมัติ</div>`:''}
   ${tab==='rejected'&&list.length?'<div class="note" style="margin-top:6px">โครงการในถังนี้ไม่แสดงในระบบ กด “นำกลับไปพิจารณา” เพื่อย้ายกลับไปกล่องรอพิจารณา</div>':''}
   </div>`;
 }
+const curList = () => S.adminTab==='rejected' ? REJ : S.adminTab==='revise' ? REV : SUBS;
 function sortSubs(list, tab){
   const {k,d}=S.sort; const L=x=>subLoc(x);
-  const val = x => ({date: tsOf(tab==='rejected'?x.reviewedAt:x.createdAt), title:x.title||'', s:+x.s||null, grp: x.grp ? 'WPREG'.indexOf(x.grp[0])*100+ +x.grp.slice(1) : null,
+  const val = x => ({date: tsOf(tab==='pending'?x.createdAt:x.reviewedAt), deadline: tsOf(x.deadline), code:x.track||'', title:x.title||'', s:+x.s||null, grp: x.grp ? 'WPREG'.indexOf(x.grp[0])*100+ +x.grp.slice(1) : null,
     prov:L(x).p.join(', '), amp:L(x).a.join(', '), tam:L(x).t.join(', '), agency:x.agency||'', budget: x.budget==null||x.budget===''?null:+x.budget, year:+x.yearStart||+x.yearEnd||null,
     status: STATUS_OPTS.indexOf(LEGACY[x.status]||x.status)>=0 ? STATUS_OPTS.indexOf(LEGACY[x.status]||x.status) : null, proposer:(x.proposer||'')+' '+(x.proposerOrg||''),
     check: subErrs(x).length, reason:x.reason||'', reviewer:x.reviewedBy||''})[k];
   const emp = v => v==null || v==='' || (typeof v==='number' && Number.isNaN(v));
   return [...list].sort((a,b)=>{ const va=val(a), vb=val(b); if(emp(va)&&emp(vb)) return 0; if(emp(va)) return 1; if(emp(vb)) return -1;
     return (typeof va==='number' && typeof vb==='number' ? va-vb : String(va).localeCompare(String(vb),'th')) * d; });
+}
+function openReviseModal(list){
+  const QUICK=['ระบุตำบล/พื้นที่ให้ชัดเจน','สภาพพื้นที่ไม่ตรงกับยุทธศาสตร์','เพิ่มรายละเอียดโครงการ (ปัญหา สิ่งที่จะทำ ประโยชน์)','ระบุหน่วยงานรับผิดชอบ','ตรวจสอบงบประมาณ','ระบุปีดำเนินการ'];
+  modal(`<div class="modal-h"><div><h2>ส่งกลับให้แก้ไข ${list.length>1?list.length+' โครงการ':''}</h2><div class="note">ผู้เสนอจะเห็นข้อความนี้ผ่านเลขติดตาม และแก้ไขส่งกลับได้ภายใน ${TRACK_DAYS} วัน ถ้าไม่แก้จะปิดเรื่องอัตโนมัติ</div></div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  <div class="modal-b">
+    <div class="note-box">${list.slice(0,5).map(x=>'• '+esc(x.title)+(x.track?'':' <span class="vbad">(ไม่มีเลขติดตาม — ผู้เสนอจะไม่เห็นข้อความ ควรติดต่อทางโทรศัพท์/อีเมล)</span>')).join('<br>')}${list.length>5?`<br>…และอีก ${list.length-5} โครงการ`:''}</div>
+    <div class="fld"><label class="req" for="rv_reason">สิ่งที่ต้องแก้ไข</label><textarea id="rv_reason" rows="3" maxlength="500" placeholder="อธิบายให้ผู้เสนอเข้าใจว่าต้องแก้ตรงไหน"></textarea>
+    <div class="qreason">${QUICK.map(q=>`<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div><div class="ferr" id="rv_err" hidden>⚠ กรุณาระบุสิ่งที่ต้องแก้ไข</div></div>
+  </div>
+  <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn warn" id="rv_ok">ส่งกลับให้แก้ไข</button></div>`);
+  $('.qreason').onclick = e=>{ const b=e.target.closest('[data-q]'); if(!b) return; const t=$('#rv_reason'); t.value = t.value ? t.value.replace(/\s*$/,'')+' · '+b.dataset.q : b.dataset.q; $('#rv_err').hidden=true; };
+  $('#rv_ok').onclick = async ()=>{ const r=$('#rv_reason').value.trim(); if(!r){ $('#rv_err').hidden=false; $('#rv_reason').classList.add('invalid'); $('#rv_reason').focus(); return; }
+    const b=$('#rv_ok'); b.disabled=true; b.textContent='กำลังบันทึก…';
+    try{ await Store.reviseMany(list, r); list.forEach(x=>S.sel.delete(x._id)); closeModal(); toast(`ส่งกลับให้แก้ไข ${list.length} โครงการแล้ว`); renderView(); }
+    catch(err){ b.disabled=false; b.textContent='ลองอีกครั้ง'; toast('ไม่สำเร็จ: '+err.message); } };
 }
 function openRejectModal(list){
   const QUICK=['ข้อมูลไม่ครบถ้วน','อยู่นอกขอบเขตลุ่มน้ำปิง','ซ้ำกับโครงการที่มีอยู่แล้ว','ไม่สอดคล้องกับยุทธศาสตร์/สภาพพื้นที่','ข้อมูลไม่ถูกต้อง'];
@@ -873,13 +978,14 @@ function openRejectModal(list){
 }
 function subXlsx(){
   if(!window.XLSX){ toast('ยังโหลดตัวส่งออกไม่เสร็จ ลองใหม่อีกครั้ง'); return; }
-  const rej=S.adminTab==='rejected', list=rej?REJ:SUBS;
+  const rej=S.adminTab!=='pending', list=curList();
   const rows=list.map((x,i)=>{ const L=subLoc(x); const o={'ลำดับ':i+1,'ชื่อแนวทาง/โครงการ':x.title,'รายละเอียด':x.detail||'','ยุทธศาสตร์':x.s?`${x.s} ${STRAT[x.s]?.short||''}`:'','สภาพพื้นที่':x.grp?`${x.grp} ${M.groups[x.grp]||''}`:'',
     'จังหวัด':L.p.join(', '),'อำเภอ':L.a.join(', '),'ตำบล':L.t.join(', '),'หน่วยงานรับผิดชอบ':x.agency||'','งบประมาณ (บาท)':toBaht(x.budget),'ปีเริ่ม (พ.ศ.)':x.yearStart||'','ปีสิ้นสุด (พ.ศ.)':x.yearEnd||'','สถานะ':LEGACY[x.status]||x.status||'','หมายเหตุ':x.note||'',
-    'ผู้เสนอ':x.proposer||'','หน่วยงาน/ชุมชนผู้เสนอ':x.proposerOrg||'','ติดต่อ':x.proposerContact||'','วันที่ส่ง':tsOf(x.createdAt)?new Date(tsOf(x.createdAt)).toLocaleString('th-TH'):''};
-    if(rej){ o['เหตุผลที่ไม่อนุมัติ']=x.reason||''; o['ผู้พิจารณา']=x.reviewedBy||''; } else { o['ผลตรวจข้อมูล']=subErrs(x).map(e=>`${FIELD_LABEL[e.f]}: ${e.msg}`).join('; ')||'ครบถ้วน'; } return o; });
+    'ผู้เสนอ':x.proposer||'','หน่วยงาน/ชุมชนผู้เสนอ':x.proposerOrg||'','ติดต่อ':x.proposerContact||'','เลขติดตาม':x.track||'','วันที่ส่ง':tsOf(x.createdAt)?new Date(tsOf(x.createdAt)).toLocaleString('th-TH'):''};
+    if(S.adminTab==='revise'){ o['ครบกำหนดแก้ไข']=tsOf(x.deadline)?new Date(tsOf(x.deadline)).toLocaleDateString('th-TH'):''; }
+    if(rej){ o[S.adminTab==='revise'?'สิ่งที่ต้องแก้ไข':'เหตุผลที่ไม่อนุมัติ']=x.reason||''; o['ผู้พิจารณา']=x.reviewedBy||''; } else { o['ผลตรวจข้อมูล']=subErrs(x).map(e=>`${FIELD_LABEL[e.f]}: ${e.msg}`).join('; ')||'ครบถ้วน'; } return o; });
   const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[6,44,40,26,34,12,14,26,22,14,10,10,14,20,20,24,16,18,40].map(w=>({wch:w}));
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, rej?'ไม่ผ่านอนุมัติ':'รอพิจารณา');
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, S.adminTab==='revise'?'ส่งกลับให้แก้ไข':rej?'ไม่ผ่านอนุมัติ':'รอพิจารณา');
   XLSX.writeFile(wb, `${rej?'โครงการไม่ผ่านอนุมัติ':'โครงการรอพิจารณา'}_ลุ่มน้ำปิง_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 function renderAdmin(){
@@ -907,6 +1013,7 @@ function renderAdmin(){
 </div>`;
     return;
   }
+  Store.housekeep();
   const inbox = adminInbox();
   const aud = AUDIT.slice(0,40).map(a=>{ const ts = a.ts?.seconds ? a.ts.seconds*1000 : a.ts; return `<tr><td class="num sub">${ts?new Date(ts).toLocaleString('th-TH'):''}</td><td>${esc(a.by)}</td><td>${esc(a.action)}</td><td class="num">${esc(a.id)}</td><td>${esc(a.detail)}</td></tr>`; }).join('');
   el.innerHTML = `${inbox}
@@ -1009,12 +1116,13 @@ function basinOfTams(ids){ const c={}; ids.forEach(id=>{ const b=T[id]?.sb?.[0];
 function propLine(x){ const t=x.proposer||'', o=String(x.proposerOrg||''); const rest=o.startsWith(t+' · ')?o.slice(t.length+3):(o===t?'':o); return esc(t)+(rest?' · '+esc(rest):''); }
 function grpOptLabel(k){ return `${k} ${M.groups[k]} : ${GROUP_DESC[k]||''}`; }
 
-function openForm(mode, data={}, sub=null){
+function openForm(mode, data={}, sub=null, rs=null){
+  const isNew = mode==='new' || mode==='resubmit';
   // mode: new | edit | review
   const d = Object.assign({sb:'', s:'', F:'', S:'', grp:'', title:'', detail:'', tambons:[], agency:'', budget:'', yearStart:'', yearEnd:'', status:'', note:'', ref:'', proposer:'', proposerOrg:'', proposerContact:''}, data);
-  const title = mode==='new' ? 'เสนอแนวทาง/โครงการใหม่' : mode==='edit' ? `แก้ไขโครงการ ${d.id}` : 'ตรวจและแก้ไขก่อนอนุมัติ';
+  const title = mode==='new' ? 'เสนอแนวทาง/โครงการใหม่' : mode==='resubmit' ? 'แก้ไขและส่งโครงการอีกครั้ง' : mode==='edit' ? `แก้ไขโครงการ ${d.id}` : 'ตรวจและแก้ไขก่อนอนุมัติ';
   const isCit0 = d.proposer===CITIZEN;
-  const proposerSec = mode==='new' ? `<div class="formsec">ผู้เสนอ</div>
+  const proposerSec = isNew ? `${mode==='resubmit'&&rs?.prev?.reason?`<div class="fix-box"><b>สิ่งที่ผู้ดูแลขอให้แก้ไข</b><div>${esc(rs.prev.reason)}</div></div>`:''}<div class="formsec">ผู้เสนอ</div>
     <div class="form-grid">
       <div class="fld full"><label class="req" for="ff_ptype">ผู้เสนอเป็น</label><select id="ff_ptype"><option value="">เลือกประเภทผู้เสนอ</option>${PROPOSER_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
       <div class="fld full" id="ff_orgBox"><label class="req" for="ff_proposerOrg">ชื่อหน่วยงาน/องค์กร</label><input id="ff_proposerOrg" placeholder="เช่น อบต.แม่แตง, สำนักงานชลประทานที่ 1"></div>
@@ -1022,7 +1130,7 @@ function openForm(mode, data={}, sub=null){
       <div class="fld full"><label for="ff_proposerContact">อีเมลหรือโทรศัพท์สำหรับติดต่อกลับ</label><input id="ff_proposerContact" placeholder="ไม่บังคับ"></div></div>`
     : mode==='review' ? `<div class="formsec">ผู้เสนอ</div><div class="note-box">${propLine(d)||'-'}${d.proposerContact?' · ติดต่อ '+esc(d.proposerContact):''}</div>` : '';
   const provs = [...new Set(pingTams().map(t=>t.p))].sort((a,b)=>a.localeCompare(b,'th'));
-  modal(`<div class="modal-h"><div><h2>${title}</h2>${mode==='new'?'<div class="note">ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>':''}</div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  modal(`<div class="modal-h"><div><h2>${title}</h2>${isNew?`<div class="note">${mode==='resubmit'?`เลขติดตามเดิม ${esc(rs?.code||'')} · `:''}ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>`:''}</div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
   <div class="modal-b">
   ${proposerSec}
   ${mode==='new'?`<div class="formsec">วิธีเสนอ <span class="note">(กดเลือก 1 แบบ)</span></div><div class="mpick" role="radiogroup" aria-label="วิธีเสนอ">
@@ -1055,20 +1163,25 @@ function openForm(mode, data={}, sub=null){
       <div class="fld"><label for="ff_budget">งบประมาณ (บาท)</label><input id="ff_budget" inputmode="decimal" placeholder="เช่น 250,000" value="${d.budget!=null&&d.budget!==''?toBaht(d.budget).toLocaleString('en-US'):''}"><div class="note" id="ff_budgetHint"></div></div>
       <div class="fld"><label for="ff_yearStart">ปีเริ่ม (พ.ศ.)</label><input id="ff_yearStart" type="number" min="2560" max="2600" value="${esc(d.yearStart??'')}"></div>
       <div class="fld"><label for="ff_yearEnd">ปีสิ้นสุด (พ.ศ.)</label><input id="ff_yearEnd" type="number" min="2560" max="2600" value="${esc(d.yearEnd??'')}"></div>
-      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${((LEGACY[d.status]||d.status)||(mode==='new'?'เตรียมการ':''))===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${((LEGACY[d.status]||d.status)||(isNew?'เตรียมการ':''))===o?'selected':''}>${o}</option>`).join('')}</select></div>
       <div class="fld full"><label for="ff_note">หมายเหตุ</label><input id="ff_note" value="${esc(d.note)}"></div>
     </div>
     <div class="err" id="ff_err" role="alert"></div>
   </form>
   ${mode==='new'?`<div id="xform" hidden>${xlsPanel()}</div>`:''}
   </div>
-  <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn ${mode==='new'?'pink':'primary'}" id="ff_save">${mode==='new'?'ส่งให้ผู้ดูแลพิจารณา':mode==='edit'?'บันทึกการแก้ไข':'อนุมัติและบันทึกลงระบบ'}</button></div>`);
+  <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn ${isNew?'pink':'primary'}" id="ff_save">${isNew?'ส่งให้ผู้ดูแลพิจารณา':mode==='edit'?'บันทึกการแก้ไข':'อนุมัติและบันทึกลงระบบ'}</button></div>`);
 
   let picked = new Set(d.tambons||[]);
   /* ผู้เสนอ */
   const ptype = ()=>$('#ff_ptype')?.value || '';
   const proposerInfo = ()=>{ const t=ptype(), cit=t===CITIZEN; const com=($('#ff_community')?.value||'').trim();
     return {proposer:t, proposerOrg: cit ? (CITIZEN+(com?' · '+com:'')) : ($('#ff_proposerOrg')?.value||'').trim(), proposerContact:($('#ff_proposerContact')?.value||'').trim()}; };
+  if(isNew){
+    if(d.proposer){ $('#ff_ptype').value=PROPOSER_TYPES.includes(d.proposer)?d.proposer:''; const cit=d.proposer===CITIZEN; $('#ff_orgBox').hidden=cit; $('#ff_citBox').hidden=!cit;
+      if(cit) $('#ff_community').value=String(d.proposerOrg||'').replace(CITIZEN,'').replace(/^ · /,''); else $('#ff_proposerOrg').value=d.proposerOrg||''; $('#ff_proposerContact').value=d.proposerContact||''; }
+  }
+  if(mode==='resubmit') $('#ff_ptype').onchange=()=>{ const cit=ptype()===CITIZEN; $('#ff_orgBox').hidden=cit; $('#ff_citBox').hidden=!cit; };
   if(mode==='new'){
     $('#ff_ptype').onchange=()=>{ const cit=ptype()===CITIZEN; $('#ff_orgBox').hidden=cit; $('#ff_citBox').hidden=!cit; };
     const setM = x=>{ $('#ff_m1').setAttribute('aria-checked',x===1); $('#ff_m2').setAttribute('aria-checked',x===2); $('#pform').hidden=x!==1; $('#xform').hidden=x!==2; $('#ff_save').hidden=x!==1; };
@@ -1141,8 +1254,8 @@ function openForm(mode, data={}, sub=null){
     const raw = {s:+v('s')||null, grp:$('#ff_grp_sel').value, title:v('title'), detail:v('detail'), tambons:tams, agency:v('agency'), budgetBaht:bb,
       yearStart: v('yearStart')===''?null:+v('yearStart'), yearEnd: v('yearEnd')===''?null:+v('yearEnd'), status:v('status')};
     let pinfo = null;
-    if(mode==='new'){ pinfo=proposerInfo(); Object.assign(raw, pinfo); }
-    const errs = validateRec(raw, {proposer: mode==='new', allowNoTambon: mode==='edit', allowNoGrp: mode==='edit'});
+    if(isNew){ pinfo=proposerInfo(); Object.assign(raw, pinfo); }
+    const errs = validateRec(raw, {proposer: isNew, allowNoTambon: mode==='edit', allowNoGrp: mode==='edit'});
     if(mode==='edit' && !tams.length && !d.sb) errs.push({f:'tambons', msg:'กรุณาเลือกตำบลอย่างน้อย 1 ตำบล'});
     if(errs.length){ showErr(errs); return; }
     clearErr();
@@ -1150,13 +1263,61 @@ function openForm(mode, data={}, sub=null){
       budget: bb==null ? null : bb/1e6, yearStart:raw.yearStart, yearEnd:raw.yearEnd, status:raw.status, note:v('note')};
     const btn = $('#ff_save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     try{
-      if(mode==='new'){ await Store.submit(Object.assign(rec, pinfo)); closeModal(); toast('ส่งโครงการแล้ว รอผู้ดูแลระบบพิจารณา'); }
+      if(mode==='new'){ const code=await Store.submit(Object.assign(rec, pinfo)); showSubmitted(code, 1); }
+      else if(mode==='resubmit'){ await Store.resubmit(rs.code, rs.k, Object.assign(rec, pinfo), rs.prev); showSubmitted(rs.code, 1, true); }
       else if(mode==='edit'){ await Store.saveProject(d.id, rec); closeModal(); toast('บันทึกการแก้ไขแล้ว'); }
       else { const id = await Store.approve(sub, rec); closeModal(); toast(`อนุมัติแล้ว บันทึกเป็นโครงการ ${id}`); }
     }catch(e){ console.error(e); $('#ff_err').textContent = 'บันทึกไม่สำเร็จ: '+(e.message||e); btn.disabled=false; btn.textContent='ลองอีกครั้ง'; }
   };
 }
 
+/* ---------- หลังส่งโครงการ: แสดงเลขติดตาม ---------- */
+const trackLink = code => `${location.origin}${location.pathname}#track=${code}`;
+const contactLine = () => `ทำเลขติดตามหาย? ติดต่อ ${esc(TRACK_CONTACT.name)}: <a href="mailto:${esc(TRACK_CONTACT.email)}">${esc(TRACK_CONTACT.email)}</a>`;
+function showSubmitted(code, n, again){
+  if(!code){ closeModal(); toast(`ส่งแล้ว ${fmt(n)} โครงการ รอผู้ดูแลระบบพิจารณา`); return; }
+  modal(`<div class="modal-h"><div><h2>${again?'ส่งแก้ไขเรียบร้อย':'ส่งโครงการเรียบร้อย'}</h2><div class="note">${fmt(n)} โครงการ · รอผู้ดูแลระบบพิจารณา</div></div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  <div class="modal-b">
+    <div class="code-card"><div class="cc-l">เลขติดตามโครงการของคุณ</div><div class="cc-code" id="cc_code">${esc(code)}</div>
+      <div class="cc-acts"><button class="btn sm primary" data-copy="${esc(code)}">คัดลอกเลข</button><button class="btn sm" data-copy="${esc(trackLink(code))}">คัดลอกลิงก์ตรวจสอบสถานะ</button></div></div>
+    <div class="tip-box"><b>เก็บเลขนี้ไว้</b> (จดไว้ แคปหน้าจอ หรือคัดลอกลิงก์) ใช้ตรวจสอบผลการพิจารณาได้ที่ปุ่ม <b>“ตรวจสอบสถานะ”</b> มุมขวาบนของเว็บ${n>1?` · เลขเดียวใช้ดูผลได้ทั้ง ${fmt(n)} โครงการในชุดนี้`:''}</div>
+    <ul class="steps-ul"><li>⏳ <b>รอพิจารณา</b> — ผู้ดูแลกำลังตรวจสอบ</li><li>✅ <b>อนุมัติ</b> — ได้รับรหัสโครงการและแสดงในระบบ</li><li>✎ <b>ส่งกลับให้แก้ไข</b> — แก้ไขและส่งใหม่ได้ภายใน ${TRACK_DAYS} วัน ไม่เช่นนั้นจะปิดเรื่องอัตโนมัติ</li><li>✕ <b>ไม่ผ่านอนุมัติ</b> — ดูเหตุผล และปรับปรุงเพื่อเสนอใหม่ได้</li></ul>
+    <p class="note">${contactLine()}</p>
+  </div>
+  <div class="modal-f"><button class="btn" data-act="close">ปิด</button><button class="btn primary" data-act="track" data-v="${esc(code)}">ดูสถานะตอนนี้</button></div>`);
+}
+const TRACK_ST = {pending:['⏳','รอพิจารณา','st-wait'], approved:['✅','อนุมัติแล้ว','st-ok'], revise:['✎','ส่งกลับให้แก้ไข','st-fix'], rejected:['✕','ไม่ผ่านอนุมัติ','st-no'], closed:['⛔','ปิดเรื่องแล้ว','st-closed']};
+function openTrack(code){
+  modal(`<div class="modal-h"><div><h2>ตรวจสอบสถานะโครงการ</h2><div class="note">กรอกเลขติดตามที่ได้รับหลังส่งโครงการ</div></div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  <div class="modal-b">
+    <form id="tk_form" class="tk-form"><input id="tk_code" placeholder="PING-XXXX-XXXX" value="${esc(code||'')}" autocomplete="off" spellcheck="false" aria-label="เลขติดตาม"><button class="btn primary" type="submit">ตรวจสอบ</button></form>
+    <div id="tk_res"></div>
+    <p class="note" style="margin-top:8px">${contactLine()}</p>
+  </div>`);
+  const run = async ()=>{ const c=normCode($('#tk_code').value), box=$('#tk_res');
+    if(!c){ box.innerHTML='<div class="err">รูปแบบเลขติดตามไม่ถูกต้อง ตัวอย่าง: PING-7K3M-Q9XA</div>'; return; }
+    $('#tk_code').value=c; box.innerHTML='<div class="note">กำลังค้นหา…</div>';
+    try{ const t=await Store.getTrack(c); if(!t){ box.innerHTML=`<div class="err">ไม่พบเลขติดตาม ${esc(c)} — ตรวจตัวอักษรอีกครั้ง หรือติดต่อ ${esc(TRACK_CONTACT.name)}</div>`; return; }
+      TRACK_CUR=t; box.innerHTML=trackHtml(t); try{ history.replaceState(null,'','#track='+c); }catch(e){} }
+    catch(e){ box.innerHTML=`<div class="err">ตรวจสอบไม่สำเร็จ: ${esc(e.message||e)}</div>`; } };
+  $('#tk_form').onsubmit = e=>{ e.preventDefault(); run(); };
+  if(code) run(); else $('#tk_code').focus();
+}
+let TRACK_CUR=null;
+function trackHtml(t){
+  const st = x => (x.review==='revise' && tsOf(x.deadline) && tsOf(x.deadline)<Date.now()) ? 'closed' : (TRACK_ST[x.review] ? x.review : 'pending');
+  const cnt={}; t.items.forEach(x=>cnt[st(x)]=(cnt[st(x)]||0)+1);
+  const sum = t.items.length>1 ? `<div class="tk-sum">${Object.entries(cnt).map(([k,n])=>`<span class="stp ${TRACK_ST[k][2]}">${TRACK_ST[k][0]} ${TRACK_ST[k][1]} ${n}</span>`).join('')}</div>` : '';
+  return sum + t.items.map(x=>{ const k=st(x), [ic,lbl,cls]=TRACK_ST[k], L=subLoc(x);
+    let body='';
+    if(k==='pending') body='<div class="note">ผู้ดูแลระบบกำลังตรวจสอบ</div>';
+    if(k==='approved') body=`<div>บันทึกในระบบเป็นโครงการ <b>${esc(x.projectId)}</b> ${P.some(p=>p.id===x.projectId)?`<button class="linkbtn" data-act="tkproj" data-v="${esc(x.projectId)}">ดูโครงการ</button>`:''}</div>`;
+    if(k==='revise') body=`<div class="tk-reason"><b>สิ่งที่ต้องแก้ไข:</b> ${esc(x.reason||'-')}</div><div class="note">แก้ไขได้ถึง ${new Date(tsOf(x.deadline)).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})} (เหลือ ${daysLeft(x.deadline)} วัน) — ถ้าไม่แก้ไขภายในกำหนดจะปิดเรื่องอัตโนมัติ</div><button class="btn sm pink" data-act="tkresub" data-v="${esc(x.k)}">แก้ไขและส่งใหม่</button>`;
+    if(k==='rejected') body=`<div class="tk-reason"><b>เหตุผล:</b> ${esc(x.reason||'ไม่ได้ระบุ')}</div><button class="btn sm" data-act="tkresub" data-v="${esc(x.k)}">ปรับปรุงและเสนอใหม่</button>`;
+    if(k==='closed') body=`<div class="tk-reason">${esc(x.reason && x.review==='closed' ? x.reason : `ไม่ได้แก้ไขภายใน ${TRACK_DAYS} วัน จึงปิดเรื่องอัตโนมัติ`)}</div><button class="btn sm" data-act="tknew" data-v="${esc(x.k)}">เสนอเป็นโครงการใหม่</button>`;
+    return `<div class="tk-item ${cls}"><div class="tk-h"><span class="stp ${cls}">${ic} ${lbl}</span><b>${esc(x.title||'')}</b></div>
+      <div class="note">${x.s?`ยุทธศาสตร์ที่ ${x.s} · `:''}${x.grp?`${esc(x.grp)} ${esc(M.groups[x.grp]||'')} · `:''}${esc(L.t.length?('ต.'+L.t.slice(0,4).join(', ต.')+(L.t.length>4?` +${L.t.length-4}`:'')+' อ.'+L.a.join(', ')):'')}</div>${body}</div>`; }).join('');
+}
 /* ---------- นำเข้าโครงการจาก Excel ---------- */
 const XLS_MAX = 300;
 function xlsPanel(){
@@ -1249,7 +1410,7 @@ function xlsBind(proposerInfo){
         const pinfo=proposerInfo();
         if(!pinfo.proposer || (pinfo.proposer!==CITIZEN && !pinfo.proposerOrg)){ $('#xl_err').textContent='กรุณากรอกข้อมูลผู้เสนอด้านบนก่อน (ประเภทผู้เสนอ และชื่อหน่วยงาน/องค์กร)'; $('#ff_proposerOrg')?.focus(); return; }
         sb.disabled=true; sb.textContent='กำลังส่ง…';
-        try{ await Store.submitMany(ok.map(r=>Object.assign({}, r, pinfo))); closeModal(); toast(`ส่งแล้ว ${fmt(ok.length)} โครงการ รอผู้ดูแลระบบพิจารณา`); }
+        try{ const code=await Store.submitMany(ok.map(r=>Object.assign({}, r, pinfo))); showSubmitted(code, ok.length); }
         catch(e2){ console.error(e2); $('#xl_err').textContent='ส่งไม่สำเร็จ: '+(e2.message||e2); sb.disabled=false; sb.textContent='ลองอีกครั้ง'; }
       };
     }catch(err){ box.innerHTML=`<div class="err">${esc(err.message||String(err))}</div>`; ok=[]; }
@@ -1316,10 +1477,11 @@ function renderView(){
 function onData(){ buildIndex(); renderKPIs(); renderFilters(); renderHeader(); renderView(); }
 function bind(){
   document.addEventListener('click', async e=>{
+    const cp = e.target.closest('[data-copy]'); if(cp){ try{ await navigator.clipboard.writeText(cp.dataset.copy); toast('คัดลอกแล้ว'); }catch(err){ toast('คัดลอกไม่ได้ กรุณาเลือกข้อความเอง'); } return; }
     const pr = e.target.closest('[data-pid]:not([data-act])'); if(pr){ openProject(pr.dataset.pid); return; }
     const a = e.target.closest('[data-act]'); if(!a) return;
     const act = a.dataset.act, v = a.dataset.v;
-    const sub = ()=>SUBS.find(s=>s._id===a.dataset.sid) || REJ.find(s=>s._id===a.dataset.sid);
+    const sub = ()=>SUBS.find(s=>s._id===a.dataset.sid) || REV.find(s=>s._id===a.dataset.sid) || REJ.find(s=>s._id===a.dataset.sid);
     switch(act){
       case 'close': closeModal(); break;
       case 'goprov': S.prov=v||null; S.amp=null; S.tam=null; renderFilters(); renderView(); break;
@@ -1369,19 +1531,24 @@ function bind(){
       case 'review': { const s=sub(); openForm('review', s, s); break; }
       case 'reject': openRejectModal([sub()]); break;
       case 'subtab': S.adminTab=v; S.sel.clear(); renderView(); break;
+      case 'track': openTrack(v||''); break;
+      case 'tkproj': closeModal(); openProject(v); break;
+      case 'tkresub': case 'tknew': { const x=TRACK_CUR?.items.find(i=>i.k===v); if(!x) break; const data={}; TRACK_FIELDS.forEach(f=>data[f]=x[f]);
+        if(act==='tkresub') openForm('resubmit', data, null, {code:TRACK_CUR.code, k:x.k, prev:{sub:x.sub, reason:x.reason}}); else openForm('new', data); break; }
+      case 'revisesel': { const list=SUBS.filter(x=>S.sel.has(x._id)); if(list.length) openReviseModal(list); break; }
       case 'sortsub': { S.sort = S.sort.k===v ? {k:v, d:-S.sort.d} : {k:v, d:(v==='date'?-1:1)}; renderView(); break; }
-      case 'reviewsel': { const list=S.adminTab==='rejected'?REJ:SUBS; const s=list.find(x=>S.sel.has(x._id)); if(s) openForm('review', s, s); break; }
+      case 'reviewsel': { const s=curList().find(x=>S.sel.has(x._id)); if(s) openForm('review', s, s); break; }
       case 'selrow': { if(window.getSelection()?.toString()) break; const id=a.dataset.sid; S.sel.has(id)?S.sel.delete(id):S.sel.add(id); renderView(); break; }
       case 'selsub': { a.checked?S.sel.add(a.dataset.sid):S.sel.delete(a.dataset.sid); renderView(); break; }
-      case 'selall': { const list=S.adminTab==='rejected'?REJ:SUBS; if(a.checked) list.forEach(x=>S.sel.add(x._id)); else S.sel.clear(); renderView(); break; }
-      case 'rejectsel': { const list=SUBS.filter(x=>S.sel.has(x._id)); if(list.length) openRejectModal(list); break; }
+      case 'selall': { const list=curList(); if(a.checked) list.forEach(x=>S.sel.add(x._id)); else S.sel.clear(); renderView(); break; }
+      case 'rejectsel': { const list=curList().filter(x=>S.sel.has(x._id)); if(list.length) openRejectModal(list); break; }
       case 'approvesel': { const list=SUBS.filter(x=>S.sel.has(x._id)); const ok=list.filter(x=>!subErrs(x).length), bad=list.length-ok.length;
         if(!ok.length){ toast('รายการที่เลือกมีข้อมูลต้องแก้ไขทั้งหมด กด “ตรวจ/แก้ไข” ก่อน'); break; }
         a.disabled=true; a.textContent='กำลังอนุมัติ…';
         try{ const ids=await Store.approveMany(ok); ok.forEach(x=>S.sel.delete(x._id)); toast(`อนุมัติแล้ว ${ids.length} โครงการ (${ids[0]}${ids.length>1?'–'+ids[ids.length-1]:''})${bad?` · ข้าม ${bad} รายการที่ต้องแก้ไข`:''}`); renderView(); }
         catch(err){ toast('อนุมัติไม่สำเร็จ: '+err.message); renderView(); } break; }
       case 'restore': { const s=sub(); try{ await Store.restoreMany([s]); S.sel.delete(s._id); toast('นำกลับไปกล่องรอพิจารณาแล้ว'); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
-      case 'restoresel': { const list=REJ.filter(x=>S.sel.has(x._id)); try{ await Store.restoreMany(list); list.forEach(x=>S.sel.delete(x._id)); toast(`นำกลับไปพิจารณา ${list.length} โครงการแล้ว`); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
+      case 'restoresel': { const list=curList().filter(x=>S.sel.has(x._id)); try{ await Store.restoreMany(list); list.forEach(x=>S.sel.delete(x._id)); toast(`นำกลับไปพิจารณา ${list.length} โครงการแล้ว`); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
       case 'viewsub': { const s=sub(); openForm('review', s, s); break; }
       case 'subxls': subXlsx(); break;
       case 'seed': { a.disabled=true; try{ await Store.seed((n,t)=>{ const el=$('#seedProg'); if(el) el.textContent=`นำเข้าแล้ว ${n}/${t}`; }); toast('นำเข้าข้อมูลตั้งต้นแล้ว'); }catch(err){ a.disabled=false; toast('นำเข้าไม่สำเร็จ: '+err.message); } break; }
@@ -1397,6 +1564,7 @@ function bind(){
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#modalBg')?.dataset.locked) closeModal(); });
   $$('.tab').forEach(b=>b.onclick = ()=>setTab(b.dataset.tab));
   $('#newBtn').onclick = ()=>openForm('new');
+  $('#trackBtn').onclick = ()=>openTrack('');
   $('#authBtn').dataset.act = 'auth';
   let qt;
   $('#filters').addEventListener('input', e=>{
@@ -1430,7 +1598,9 @@ async function boot(){
   $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===S.tab));
   await Store.init();
   const ss = Sess.get();
-  if(!ss) openWelcome();
+  const tk = /^#track=(.+)$/.exec(location.hash||'');
+  if(tk){ if(!ss) Sess.set({role:'user'}, false); renderHeader(); openTrack(decodeURIComponent(tk[1])); }
+  else if(!ss) openWelcome();
   else if(ss.role==='admin' && Store.mode==='firebase'){ setTimeout(()=>{ if(!S.admin && !Store.auth.currentUser){ Sess.clear(); openWelcome('admin'); } }, 2500); }
 }
 /* ปรับขนาดชื่อระบบให้พอดีบรรทัดเดียวตามฟอนต์จริงที่โหลด */
