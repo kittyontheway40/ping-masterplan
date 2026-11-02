@@ -5,7 +5,7 @@ const CFG = window.APP_CONFIG || {firebase:{}};
 const DATA = (window.DATA_BASE || 'data/');
 const STATUS_OPTS = ['เตรียมการ','กำลังดำเนินการ','โครงการต่อเนื่อง','แล้วเสร็จ'];
 // ความหมายของสภาพพื้นที่ (กลุ่มพื้นที่) แต่ละรหัส ใช้ในฟอร์มเสนอโครงการและแบบฟอร์ม Excel
-const GROUP_DESC = {"W1": "ระบบประปาและแหล่งน้ำดื่มใช้งานได้ดีอยู่แล้ว เน้นดูแลรักษาให้ใช้ได้ต่อเนื่องและพร้อมรับช่วงแล้ง", "W2": "มีระบบประปาอยู่แล้วแต่ชำรุด น้ำไหลอ่อน น้ำสูญเสียมาก หรือผลิตไม่พอ ควรซ่อมแซม/ปรับปรุงก่อนสร้างใหม่", "W3": "แหล่งน้ำดิบผิวดิน (ลำห้วย อ่าง สระ) มีน้อยหรือแห้งหน้าแล้ง ต้องเพิ่มแหล่งเก็บกักหรือจุดสูบน้ำ", "W4": "แหล่งน้ำผิวดินไม่พอแต่มีศักยภาพน้ำใต้ดิน ใช้บ่อบาดาลเสริมหรือทดแทน", "W5": "พึ่งพาแหล่งน้ำเพียงแหล่งเดียวซึ่งเสี่ยง ควรเพิ่มแหล่งสำรองหรือเชื่อมโยงระบบประปาระหว่างหมู่บ้าน/ตำบล", "W6": "หมู่บ้านบนพื้นที่สูงหรือบ้านเรือนอยู่ห่างกัน วางท่อขนาดใหญ่ยาก เหมาะกับระบบขนาดเล็ก เช่น ประปาภูเขา ถังเก็บน้ำ", "W7": "น้ำดิบหรือน้ำประปามีปัญหาคุณภาพ เช่น ขุ่น มีสนิมเหล็ก หรือปนเปื้อน ต้องปรับปรุงการกรองและป้องกันแหล่งน้ำ", "W8": "ยังขาดข้อมูลระบบประปา ผู้ใช้น้ำ หรือคุณภาพน้ำ ควรสำรวจเก็บข้อมูลก่อนวางโครงการ", "P1": "พื้นที่เกษตร/อุตสาหกรรมที่มีน้ำเพียงพออยู่แล้ว เน้นใช้น้ำอย่างมีประสิทธิภาพและรักษาความมั่นคง", "P2": "มีระบบชลประทาน ฝาย หรือคลองส่งน้ำอยู่แล้วแต่เสื่อมสภาพ ตื้นเขิน หรือส่งน้ำไม่ทั่วถึง", "P3": "พื้นที่เกษตรนอกเขตชลประทานที่พึ่งน้ำฝน เสี่ยงขาดน้ำเมื่อฝนทิ้งช่วง", "P4": "มีความต้องการใช้น้ำแต่ยังขาดแหล่งเก็บกักหรือระบบส่ง/กระจายน้ำไปถึงพื้นที่ใช้น้ำ", "P5": "ใช้น้ำมากเกินศักยภาพของพื้นที่ ควรปรับชนิดพืช ฤดูปลูก หรือใช้เทคโนโลยีประหยัดน้ำ", "P6": "มีกิจกรรมเศรษฐกิจที่ใช้น้ำมาก เช่น อุตสาหกรรม ท่องเที่ยว หรือเกษตรมูลค่าสูง ต้องบริหารความต้องการน้ำ", "P7": "ความต้องการน้ำใกล้หรือเกินปริมาณน้ำที่มี ควรควบคุมการขยายพื้นที่หรือกิจการที่ใช้น้ำเพิ่ม", "P8": "ยังขาดข้อมูลการใช้น้ำภาคเกษตรและอุตสาหกรรม ควรสำรวจเก็บข้อมูลก่อน", "R1": "พื้นที่ต้นน้ำลาดชัน เสี่ยงน้ำป่าไหลหลากและดินโคลนถล่ม ต้องเตือนภัยล่วงหน้าและชะลอน้ำ", "R2": "ชุมชนเมือง/เขตเทศบาลที่มีน้ำท่วมขังหรือน้ำล้นตลิ่งเข้าเมือง ต้องพัฒนาระบบระบายน้ำและป้องกันเมือง", "R3": "ที่ราบลุ่มริมแม่น้ำที่น้ำท่วมเป็นประจำ ใช้เป็นพื้นที่หน่วงน้ำ/แก้มลิง และปรับการใช้ประโยชน์ที่ดิน", "R4": "ลำน้ำแคบ ตื้นเขิน มีสิ่งกีดขวางทางน้ำ หรือตลิ่งถูกกัดเซาะ ต้องแก้จุดคอขวดและป้องกันตลิ่ง", "R5": "พื้นที่ที่เจอทั้งน้ำท่วมหน้าฝนและขาดน้ำหน้าแล้ง ควรเก็บน้ำหลากไว้ใช้ในหน้าแล้ง", "R6": "มีถนน สะพาน โรงพยาบาล ระบบประปา/ไฟฟ้า หรือสถานที่สำคัญที่เสี่ยงเสียหายจากน้ำท่วม ต้องป้องกันเป็นพิเศษ", "R7": "ยังขาดข้อมูลสถานีวัดน้ำ แผนที่เสี่ยงภัย หรือประวัติน้ำท่วม–แล้ง ควรเก็บข้อมูลเพิ่ม", "E1": "ป่าต้นน้ำยังสมบูรณ์ เน้นอนุรักษ์ ป้องกันการบุกรุก และรักษาความชุ่มชื้น", "E2": "ป่าต้นน้ำถูกทำลายหรือเปลี่ยนเป็นพื้นที่เกษตร ต้องฟื้นฟูป่าและสร้างระบบชะลอน้ำ", "E3": "หน้าดินถูกชะล้างมาก ตะกอนไหลลงลำน้ำและแหล่งน้ำทำให้ตื้นเขิน ต้องอนุรักษ์ดินและน้ำ", "E4": "ป่าริมน้ำ หนอง บึง หรือพื้นที่ชุ่มน้ำถูกบุกรุกหรือเสื่อมโทรม ต้องฟื้นฟู", "E5": "น้ำในลำน้ำเน่าเสียหรือปนเปื้อนจากชุมชน เกษตร หรืออุตสาหกรรม ต้องบำบัดและควบคุมแหล่งมลพิษ", "E6": "ลำน้ำมีน้ำไหลน้อยเกินไปในหน้าแล้ง กระทบสัตว์น้ำและระบบนิเวศ ต้องรักษาปริมาณน้ำขั้นต่ำ", "E7": "พื้นที่รอบแหล่งน้ำดิบที่ใช้ผลิตน้ำประปา ต้องคุ้มครองจากการปนเปื้อนและการบุกรุก", "E8": "ยังขาดข้อมูลสิ่งแวดล้อม คุณภาพน้ำ หรือความหลากหลายทางชีวภาพ ควรสำรวจเพิ่ม", "G1": "การบริหารจัดการน้ำในพื้นที่ทำได้ดีอยู่แล้ว เน้นรักษามาตรฐานและต่อยอด", "G2": "ขาดสถานีวัดน้ำฝน ระดับน้ำ หรือคุณภาพน้ำ ทำให้ติดตามสถานการณ์และเตือนภัยได้ยาก", "G3": "ปัญหาน้ำคร่อมหลายตำบล อำเภอ หรือจังหวัด ต้องมีกลไกประสานงานร่วมกัน", "G4": "มีความขัดแย้งในการแบ่งปันน้ำ เช่น ต้นน้ำกับปลายน้ำ หรือเกษตรกับประปา ต้องมีกติกาจัดสรรน้ำ", "G5": "องค์กรท้องถิ่นหรือกลุ่มผู้ใช้น้ำยังขาดบุคลากร งบประมาณ หรือความรู้ ต้องเสริมศักยภาพ", "G6": "ชุมชนมีความพร้อม เหมาะเป็นพื้นที่นำร่องการบริหารจัดการน้ำแบบมีส่วนร่วม", "G7": "เป็นจุดสำคัญต่อการตัดสินใจระดับลุ่มน้ำ เช่น อ่างเก็บน้ำหลัก หรือจุดควบคุมน้ำ", "G8": "ยังขาดข้อมูลพื้นฐานด้านการบริหารจัดการน้ำ ควรจัดทำฐานข้อมูลก่อน"};
+let GROUP_DESC = {};   // เงื่อนไขการจำแนกสภาพพื้นที่ โหลดจาก master.json (groupInfo)
 const STAGES = [['เตรียมการ','#e2963a'],['กำลังดำเนินการ','#2c5ea5'],['โครงการต่อเนื่อง','#7b5ea7'],['แล้วเสร็จ','#2f8a54'],['ยังไม่ระบุ','#c3cbd8']];
 const LEGACY = {'แนวคิดโครงการ':'เตรียมการ','ศึกษาความเหมาะสม':'เตรียมการ','สำรวจออกแบบ':'เตรียมการ','เสนอของบประมาณ':'เตรียมการ','ได้รับงบประมาณ':'เตรียมการ','อยู่ระหว่างดำเนินการ':'กำลังดำเนินการ','ดำเนินการแล้วเสร็จ':'แล้วเสร็จ'};
 const stageOf = p => { const v = LEGACY[p.status] || p.status; return STATUS_OPTS.includes(v) ? v : 'ยังไม่ระบุ'; };
@@ -883,9 +883,8 @@ function openForm(mode, data={}, sub=null){
   const title = mode==='new' ? 'เสนอแนวทาง/โครงการใหม่' : mode==='edit' ? `แก้ไขโครงการ ${d.id}` : 'ตรวจและแก้ไขก่อนอนุมัติ';
   const isCit0 = d.proposer===CITIZEN;
   const proposerSec = mode==='new' ? `<div class="formsec">ผู้เสนอ</div>
-    <div class="fld full"><span class="lbl req">ผู้เสนอเป็น</span>
-      <div class="ptype" role="radiogroup">${PROPOSER_TYPES.map((t,i)=>`<label class="chip"><input type="radio" name="ff_ptype" value="${t}"> ${t}</label>`).join('')}</div></div>
     <div class="form-grid">
+      <div class="fld full"><label class="req" for="ff_ptype">ผู้เสนอเป็น</label><select id="ff_ptype"><option value="">เลือกประเภทผู้เสนอ</option>${PROPOSER_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
       <div class="fld full" id="ff_orgBox"><label class="req" for="ff_proposerOrg">ชื่อหน่วยงาน/องค์กร</label><input id="ff_proposerOrg" placeholder="เช่น อบต.แม่แตง, สำนักงานชลประทานที่ 1"></div>
       <div class="fld full" id="ff_citBox" hidden><label for="ff_community">หมู่บ้าน/ชุมชนที่อาศัย (ถ้ามี)</label><input id="ff_community" placeholder="เช่น บ้านป่าไผ่ หมู่ 3"><div class="note">ประชาชนไม่ต้องระบุชื่อ–นามสกุล แนะนำให้ใส่ช่องทางติดต่อกลับ เพื่อให้เจ้าหน้าที่สอบถามรายละเอียดเพิ่มเติมได้</div></div>
       <div class="fld full"><label for="ff_proposerContact">อีเมลหรือโทรศัพท์สำหรับติดต่อกลับ</label><input id="ff_proposerContact" placeholder="ไม่บังคับ"></div></div>`
@@ -894,7 +893,9 @@ function openForm(mode, data={}, sub=null){
   modal(`<div class="modal-h"><div><h2>${title}</h2>${mode==='new'?'<div class="note">ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>':''}</div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
   <div class="modal-b">
   ${proposerSec}
-  ${mode==='new'?`<div class="formsec">วิธีเสนอ</div><div class="seg seg-wide" role="tablist"><button type="button" class="seg-b" id="ff_m1" aria-pressed="true">กรอกทีละโครงการ</button><button type="button" class="seg-b" id="ff_m2" aria-pressed="false">นำเข้าจาก Excel (หลายโครงการ)</button></div>`:''}
+  ${mode==='new'?`<div class="formsec">วิธีเสนอ <span class="note">(กดเลือก 1 แบบ)</span></div><div class="mpick" role="radiogroup" aria-label="วิธีเสนอ">
+    <button type="button" class="mcard m1" id="ff_m1" role="radio" aria-checked="true"><span class="mic">✎</span><span class="mtx"><b>กรอกทีละโครงการ</b><small>กรอกในหน้าเว็บ เหมาะกับ 1–5 โครงการ</small></span><span class="mchk" aria-hidden="true">✓</span></button>
+    <button type="button" class="mcard m2" id="ff_m2" role="radio" aria-checked="false"><span class="mic">⊞</span><span class="mtx"><b>นำเข้าจาก Excel</b><small>หลายโครงการในครั้งเดียว (สูงสุด 300)</small></span><span class="mchk" aria-hidden="true">✓</span></button></div>`:''}
   <form id="pform" class="pform" novalidate>
     <div class="formsec">พื้นที่ดำเนินการ</div><div class="form-grid">
       <div class="fld"><label class="req" for="ff_prov">จังหวัด</label><select id="ff_prov"><option value="">เลือกจังหวัด</option>${provs.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
@@ -907,10 +908,10 @@ function openForm(mode, data={}, sub=null){
     </div>
     <div class="formsec">ยุทธศาสตร์และสภาพพื้นที่</div><div class="form-grid">
       <div class="fld full"><label class="req" for="ff_s">ยุทธศาสตร์</label><select id="ff_s"><option value="">เลือกยุทธศาสตร์</option>${M.strategies.map(s=>`<option value="${s.n}" ${+d.s===s.n?'selected':''}>ยุทธศาสตร์ที่ ${s.n} ${esc(s.short)}</option>`).join('')}</select></div>
-      <div class="fld full"><label class="${mode==='edit'?'':'req'}" for="ff_grp_sel">สภาพพื้นที่</label><select id="ff_grp_sel"></select>
+      <div class="fld full"><label class="${mode==='edit'?'':'req'}" for="ff_gpBtn">สภาพพื้นที่</label><input type="hidden" id="ff_grp_sel" value="">
+        <div class="gpick" id="ff_gpick"><button type="button" class="gp-btn" id="ff_gpBtn" aria-haspopup="listbox" aria-expanded="false"></button><div class="gp-list" id="ff_gpList" role="listbox" hidden></div></div>
         <div class="grp-desc" id="ff_grpDesc" hidden></div>
-        <div class="note" id="ff_grpHint"></div>
-        <details class="grp-all" id="ff_grpAll" hidden><summary>ดูความหมายของสภาพพื้นที่ทั้งหมดในยุทธศาสตร์นี้</summary><div id="ff_grpList"></div></details></div>
+        <div class="note" id="ff_grpHint"></div></div>
       ${d.F||d.S?`<div class="fld full note">แผนงาน/มาตรการเดิมจากแผนแม่บท: ${esc([d.F,d.S].filter(Boolean).join(' / '))} (คงไว้ตามเดิม)</div>`:''}
     </div>
     <div class="formsec">รายละเอียดแนวทาง/โครงการ</div><div class="form-grid">
@@ -933,12 +934,12 @@ function openForm(mode, data={}, sub=null){
 
   let picked = new Set(d.tambons||[]);
   /* ผู้เสนอ */
-  const ptype = ()=>$('input[name=ff_ptype]:checked')?.value || '';
+  const ptype = ()=>$('#ff_ptype')?.value || '';
   const proposerInfo = ()=>{ const t=ptype(), cit=t===CITIZEN; const com=($('#ff_community')?.value||'').trim();
     return {proposer:t, proposerOrg: cit ? (CITIZEN+(com?' · '+com:'')) : ($('#ff_proposerOrg')?.value||'').trim(), proposerContact:($('#ff_proposerContact')?.value||'').trim()}; };
   if(mode==='new'){
-    $$('input[name=ff_ptype]').forEach(r=>r.onchange=()=>{ const cit=ptype()===CITIZEN; $('#ff_orgBox').hidden=cit; $('#ff_citBox').hidden=!cit; });
-    const setM = x=>{ $('#ff_m1').setAttribute('aria-pressed',x===1); $('#ff_m2').setAttribute('aria-pressed',x===2); $('#pform').hidden=x!==1; $('#xform').hidden=x!==2; $('#ff_save').hidden=x!==1; };
+    $('#ff_ptype').onchange=()=>{ const cit=ptype()===CITIZEN; $('#ff_orgBox').hidden=cit; $('#ff_citBox').hidden=!cit; };
+    const setM = x=>{ $('#ff_m1').setAttribute('aria-checked',x===1); $('#ff_m2').setAttribute('aria-checked',x===2); $('#pform').hidden=x!==1; $('#xform').hidden=x!==2; $('#ff_save').hidden=x!==1; };
     $('#ff_m1').onclick=()=>setM(1); $('#ff_m2').onclick=()=>setM(2);
     xlsBind(proposerInfo);
   }
@@ -958,25 +959,31 @@ function openForm(mode, data={}, sub=null){
     $('#ff_basin').textContent = sb ? `ลุ่มน้ำสาขา (ระบบกำหนดจากตำบลที่เลือก): ${sb}` : '';
     fillG(); };
   /* สภาพพื้นที่ */
-  const fillG = ()=>{ const s=+$('#ff_s').value, sel=$('#ff_grp_sel');
-    if(!s){ sel.innerHTML='<option value="">เลือกยุทธศาสตร์ก่อน</option>'; sel.disabled=true; $('#ff_grpHint').textContent='เลือกยุทธศาสตร์ก่อน แล้วจึงเลือกสภาพพื้นที่ของยุทธศาสตร์นั้น'; $('#ff_grpAll').hidden=true; descG(); return; }
-    sel.disabled=false;
+  const gItem = (k,inT,tag='button')=>`<${tag} ${tag==='button'?`type="button" class="gp-item" role="option" data-k="${k}" aria-selected="${d.grp===k}"`:'class="gp-sel"'}><span class="gcode f${'WPREG'.indexOf(k[0])+1}">${k}</span><span class="gtx"><b class="gname">${esc(M.groups[k])}${inT&&inT.has(k)?' <span class="gstar" title="พบในตำบลที่เลือก">★</span>':''}</b><span class="gcond">${esc(GROUP_DESC[k]||'')}</span></span></${tag}>`;
+  const fillG = ()=>{ const s=+$('#ff_s').value, btn=$('#ff_gpBtn'), list=$('#ff_gpList');
     const inT=new Set(); picked.forEach(id=>(T[id]?.grp||[]).forEach(c=>inT.add(c)));
-    const ks=grpKeys(s), fam=famOf(s);
-    sel.innerHTML=`<option value="">เลือกสภาพพื้นที่</option><optgroup label="${fam} · ${esc(M.groupFamilies[fam])}">${ks.map(k=>`<option value="${k}" ${d.grp===k?'selected':''}>${inT.has(k)?'★ ':''}${esc(grpOptLabel(k))}</option>`).join('')}</optgroup>`;
-    $('#ff_grpHint').textContent = ks.some(k=>inT.has(k)) ? '★ = พบสภาพพื้นที่นี้ในตำบลที่เลือก (จากการวิเคราะห์ในแผนแม่บท)' : '';
-    $('#ff_grpAll').hidden=false;
-    $('#ff_grpList').innerHTML = ks.map(k=>`<div class="gdef"><span class="pill code">${k}</span> <b>${esc(M.groups[k])}</b>${inT.has(k)?' ★':''}<div>${esc(GROUP_DESC[k]||'')}</div></div>`).join('');
+    const ks=grpKeys(s); if(d.grp && !ks.includes(d.grp)) d.grp='';
+    $('#ff_grp_sel').value=d.grp||'';
+    btn.disabled=!s; list.hidden=true; btn.setAttribute('aria-expanded','false');
+    btn.innerHTML = !s ? '<span class="gp-ph">เลือกยุทธศาสตร์ก่อน</span>' : d.grp ? gItem(d.grp,inT,'span') : '<span class="gp-ph">กดเพื่อเลือกสภาพพื้นที่</span>';
+    list.innerHTML = ks.map(k=>gItem(k,inT)).join('');
+    $('#ff_grpHint').textContent = !s ? 'เลือกยุทธศาสตร์ก่อน แล้วจึงเลือกสภาพพื้นที่ของยุทธศาสตร์นั้น' : ks.some(k=>inT.has(k)) ? '★ = พบสภาพพื้นที่นี้ในตำบลที่เลือก (จากการวิเคราะห์ในแผนแม่บท)' : '';
     descG(); };
-  const descG = ()=>{ const k=$('#ff_grp_sel').value, box=$('#ff_grpDesc'); box.hidden=!k; if(k) box.innerHTML=`<b>${k} ${esc(M.groups[k])}</b> — ${esc(GROUP_DESC[k]||'')}`; };
+  const descG = ()=>{ const k=d.grp, box=$('#ff_grpDesc'); box.hidden=!k; if(k) box.innerHTML=`<span class="gd-l">แนวทางที่เหมาะสมกับสภาพพื้นที่นี้</span>${esc(M.groupInfo?.[k]?.plan||'')}`; };
+  $('#ff_gpBtn').onclick = ()=>{ const l=$('#ff_gpList'), open=l.hidden; l.hidden=!open; $('#ff_gpBtn').setAttribute('aria-expanded',open); if(open) (l.querySelector('[aria-selected="true"]')||l.querySelector('.gp-item'))?.focus(); };
+  $('#ff_gpList').addEventListener('click', e=>{ const it=e.target.closest('.gp-item'); if(!it) return; d.grp=it.dataset.k; fillG(); $('#ff_gpBtn').focus(); });
+  $('#ff_gpick').addEventListener('keydown', e=>{ if($('#ff_gpList').hidden) return; const items=[...$$('#ff_gpList .gp-item')], i=items.indexOf(document.activeElement);
+    if(e.key==='ArrowDown'){ e.preventDefault(); items[Math.min(i+1,items.length-1)]?.focus(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); items[Math.max(i-1,0)]?.focus(); }
+    else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); $('#ff_gpList').hidden=true; $('#ff_gpBtn').setAttribute('aria-expanded','false'); $('#ff_gpBtn').focus(); } });
+  document.addEventListener('click', e=>{ if(!e.target.closest('#ff_gpick')){ const l=$('#ff_gpList'); if(l && !l.hidden){ l.hidden=true; $('#ff_gpBtn').setAttribute('aria-expanded','false'); } } });
   $('#ff_prov').onchange = ()=>{ fillAmp(); fillT(); };
   $('#ff_amp').onchange = fillT;
   $('#ff_s').onchange = ()=>{ d.grp=''; fillT(); };
-  $('#ff_grp_sel').onchange = ()=>{ d.grp=$('#ff_grp_sel').value; descG(); };
-  $('#ff_tams').addEventListener('change', e=>{ if(e.target.type==='checkbox'){ d.grp=$('#ff_grp_sel').value; e.target.checked?picked.add(e.target.value):picked.delete(e.target.value); showPicked(); } });
-  $('#ff_picked').addEventListener('click', e=>{ const b=e.target.closest('[data-rm]'); if(!b) return; d.grp=$('#ff_grp_sel').value; picked.delete(b.dataset.rm); fillT(); });
-  $('#ff_allAmp').onclick = ()=>{ d.grp=$('#ff_grp_sel').value; ampTams().forEach(t=>picked.add(t.id)); fillT(); };
-  $('#ff_clrAmp').onclick = ()=>{ d.grp=$('#ff_grp_sel').value; ampTams().forEach(t=>picked.delete(t.id)); fillT(); };
+  $('#ff_tams').addEventListener('change', e=>{ if(e.target.type==='checkbox'){ e.target.checked?picked.add(e.target.value):picked.delete(e.target.value); showPicked(); } });
+  $('#ff_picked').addEventListener('click', e=>{ const b=e.target.closest('[data-rm]'); if(!b) return; picked.delete(b.dataset.rm); fillT(); });
+  $('#ff_allAmp').onclick = ()=>{ ampTams().forEach(t=>picked.add(t.id)); fillT(); };
+  $('#ff_clrAmp').onclick = ()=>{ ampTams().forEach(t=>picked.delete(t.id)); fillT(); };
   // ค่าเริ่มต้น: ใช้จังหวัด/อำเภอของตำบลแรกที่มีอยู่
   const t0 = T[[...picked][0]];
   if(t0){ $('#ff_prov').value=t0.p; fillAmp(); $('#ff_amp').value=t0.a; }
@@ -1011,7 +1018,7 @@ function openForm(mode, data={}, sub=null){
 const XLS_MAX = 300;
 function xlsPanel(){
   return `<div class="xsteps">
-    <div class="xstep"><div class="xn">1</div><div><b>ดาวน์โหลดแบบฟอร์ม Excel</b><div class="note">มีหัวตาราง ตัวเลือกแบบดรอปดาวน์ ตัวอย่างการกรอก ความหมายสภาพพื้นที่ และรายชื่อตำบลทั้งหมดในลุ่มน้ำปิง</div>
+    <div class="xstep"><div class="xn">1</div><div><b>ดาวน์โหลดแบบฟอร์ม Excel</b><div class="note">มี 3 ชีต: กรอกข้อมูล · ตัวอย่าง · คำอธิบายสภาพพื้นที่ (ตัวเลือกส่วนใหญ่เป็นดรอปดาวน์)</div>
       <a class="btn sm primary" href="assets/template_proposal.xlsx?v=${encodeURIComponent(CFG.version||'')}" download="แบบฟอร์มเสนอโครงการ_ลุ่มน้ำปิง.xlsx">ดาวน์โหลดแบบฟอร์ม (.xlsx)</a></div></div>
     <div class="xstep"><div class="xn">2</div><div><b>กรอกข้อมูลในชีต "กรอกข้อมูล"</b><div class="note">1 แถว = 1 โครงการ · ช่องที่มี * ต้องกรอก · ตำบลหลายตำบลคั่นด้วยเครื่องหมายจุลภาค ( , ) หรือพิมพ์ "ทั้งอำเภอ" · ส่งได้ครั้งละไม่เกิน ${XLS_MAX} โครงการ</div></div></div>
     <div class="xstep"><div class="xn">3</div><div><b>อัปโหลดไฟล์ที่กรอกแล้ว</b><div class="note">ระบบจะตรวจทุกแถวและแสดงผลก่อนส่ง</div>
@@ -1056,7 +1063,7 @@ function xlsValidate(x){
     if(!x.t) err.push('ยังไม่ได้ระบุตำบล');
     else if(/ทั้งอำเภอ|ทุกตำบล/.test(x.t)) tams = inA.map(t=>t.id);
     else { const bad=[]; x.t.split(/[,，、;\/\n]+/).map(s=>cleanLoc(s,'t')).filter(Boolean).forEach(n=>{ const t=inA.find(t=>t.t===n); t?tams.push(t.id):bad.push(n); });
-      if(bad.length) err.push(`ไม่พบตำบล ${bad.map(b=>'"'+b+'"').join(', ')} ใน อ.${a} (ดูชื่อที่ถูกต้องในชีต "รายชื่อตำบล")`);
+      if(bad.length) err.push(`ไม่พบตำบล ${bad.map(b=>'"'+b+'"').join(', ')} ใน อ.${a} · ตำบลใน อ.${a} ที่อยู่ในลุ่มน้ำปิง ได้แก่ ${inA.map(t=>t.t).sort((x,y)=>x.localeCompare(y,'th')).join(', ')}`);
       if(!tams.length && !bad.length) err.push('ยังไม่ได้ระบุตำบล'); }
   }
   tams=[...new Set(tams)]; if(tams.length>120) err.push('ตำบลเกิน 120 ตำบลต่อโครงการ');
@@ -1247,9 +1254,10 @@ function bind(){
 async function boot(){
   bind();
   try{
-    const [m, seed] = await Promise.all([fetch(DATA+'master.json').then(r=>r.json()), fetch(DATA+'projects_seed.json').then(r=>r.json())]);
+    const [m, seed] = await Promise.all([fetch(DATA+'master.json?v='+encodeURIComponent(CFG.version||'')).then(r=>r.json()), fetch(DATA+'projects_seed.json?v='+encodeURIComponent(CFG.version||'')).then(r=>r.json())]);
     M = m; SEED = seed;
     M.tambons.forEach(t=>T[t.id]=t);
+    GROUP_DESC = Object.fromEntries(Object.entries(M.groupInfo||{}).map(([k,v])=>[k,v.cond]));
     M.measures.forEach(x=>MEAS[x.code]=x); M.programmes.forEach(x=>PROG[x.code]=x); M.strategies.forEach(x=>STRAT[x.n]=x); M.basins.forEach(x=>BAS[x.name]=x);
   }catch(e){ $('#view').innerHTML = `<div class="empty">โหลดข้อมูลไม่สำเร็จ (${esc(e.message)}) ตรวจว่าโฟลเดอร์ data อยู่ข้างไฟล์ index.html</div>`; return; }
   const h = (location.hash||'').slice(1); if(['area','basin','map','admin'].includes(h)) S.tab=h;

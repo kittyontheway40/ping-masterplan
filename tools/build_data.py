@@ -164,3 +164,7 @@ tt=t[['id','geometry']].copy(); gj(tt,120,['id'],'tambon.geojson')
 sbg2=sbg[['SB_CODE','SB_NAME_T','geometry']].rename(columns={'SB_CODE':'code','SB_NAME_T':'name'}); gj(sbg2,150,['code','name'],'subbasin.geojson')
 pr=g.read_file(D+'province_ping.gpkg')[['ADM1_TH','geometry']].rename(columns={'ADM1_TH':'name'}); print(pr.name.tolist()); gj(pr,400,['name'],'province.geojson',3)
 rv=g.read_file(D+'ping_mainriver.gpkg'); rv['k']=1; rv=rv.dissolve('k').reset_index(); gj(rv,80,['k'],'river.geojson')
+
+# ปรับชื่อ/นิยามสภาพพื้นที่ตามฉบับปรับปรุง (data/groups.json)
+import subprocess, sys as _sys
+subprocess.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'apply_groups.py')], check=True)
