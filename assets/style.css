@@ -385,3 +385,38 @@ td.grp{min-width:130px}
 .steps-ol li{margin-bottom:8px}
 .steps-ol code{background:rgba(30,58,110,.08);padding:1px 5px;border-radius:4px}
 .copyb{background:#fff;border:1px solid var(--blue,#2a5ea8);color:var(--blue,#2a5ea8)}
+/* v4.4 ฟอร์มเสนอโครงการ */
+.ptype{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.ptype .chip{font-size:.86rem;padding:5px 12px}
+.ptype .chip:has(input:checked){background:var(--navy);border-color:var(--navy);color:#fff}
+.note-box{background:var(--bg-2,#f3f6fb);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:.9rem}
+.seg-wide{display:flex;width:100%}
+.seg-wide .seg-b{flex:1;padding:9px 12px;font-weight:600}
+.pform[hidden],#xform[hidden]{display:none}
+.tam-tools{font-size:.85rem;margin:2px 0 6px}
+.picked{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.picked:empty{display:none}
+.pchip{display:inline-flex;align-items:center;gap:4px;background:#eaf0fa;border:1px solid #c9d6ec;color:var(--navy);border-radius:99px;padding:2px 4px 2px 10px;font-size:.8rem}
+.pchip button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:1rem;line-height:1;padding:0 4px;border-radius:50%}
+.pchip button:hover{background:rgba(0,0,0,.08)}
+.grp-desc{margin-top:6px;background:#fdf2f7;border-left:3px solid var(--pink);border-radius:4px;padding:8px 10px;font-size:.88rem;line-height:1.6}
+.grp-all{margin-top:6px;font-size:.86rem}
+.grp-all summary{cursor:pointer;color:var(--blue);font-weight:600}
+.gdef{padding:6px 0;border-bottom:1px dashed var(--line);line-height:1.55}
+.gdef div{color:var(--muted,#5a6b85);margin-top:2px}
+.xsteps{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.xstep{display:flex;gap:12px;align-items:flex-start;background:var(--bg-2,#f6f8fc);border:1px solid var(--line);border-radius:10px;padding:12px}
+.xstep .note{margin:2px 0 8px}
+.xn{flex:0 0 28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700}
+.upl{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.upl input{position:absolute;opacity:0;width:1px;height:1px}
+.upl span{border:1px dashed var(--blue,#2a5ea8);color:var(--blue,#2a5ea8);background:#fff;border-radius:8px;padding:7px 14px;font-weight:600;font-size:.9rem}
+.upl:focus-within span{outline:2px solid var(--pink)}
+#xl_res{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.xsum{font-weight:600}
+.okc{color:#2f8a54;font-weight:600}
+.badc{color:#c0392b;font-weight:600}
+.xprev{max-height:340px;overflow:auto}
+.xprev td{vertical-align:top;font-size:.84rem}
+.xprev tr.xbad td{background:#fff5f4}
+.xstep a.btn{text-decoration:none;display:inline-block}
