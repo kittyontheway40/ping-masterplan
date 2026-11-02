@@ -420,3 +420,4 @@ td.grp{min-width:130px}
 .xprev td{vertical-align:top;font-size:.84rem}
 .xprev tr.xbad td{background:#fff5f4}
 .xstep a.btn{text-decoration:none;display:inline-block}
+#xl_res>.btn{align-self:flex-start}
