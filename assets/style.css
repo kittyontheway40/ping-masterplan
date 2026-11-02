@@ -461,3 +461,43 @@ td.grp{min-width:130px}
 .gcond{color:var(--muted,#5a6b85);font-size:.82rem;line-height:1.5}
 .gstar{color:#d39a00}
 .grp-desc .gd-l{display:block;font-weight:700;color:var(--pink);font-size:.8rem;margin-bottom:2px}
+/* v4.6 ตรวจข้อมูลรายช่อง */
+.invalid,.gp-btn.invalid{border-color:#c0392b!important;box-shadow:0 0 0 3px rgba(192,57,43,.15)!important}
+.tam-pick.invalid{border-color:#c0392b!important}
+.ferr{color:#c0392b;font-size:.82rem;margin-top:4px;line-height:1.45}
+.err-sum{background:#fff5f4;border:1px solid #f1c0ba;border-left:4px solid #c0392b;border-radius:8px;padding:10px 12px;color:#7a1f14;font-size:.88rem}
+.err-sum ul{margin:6px 0 0 18px;padding:0}
+.err-sum li{margin:2px 0}
+.err-sum .linkbtn{color:#c0392b;font-weight:700}
+/* กล่องรอพิจารณาแบบตาราง */
+.itabs{display:flex;gap:6px;margin:6px 0 0;border-bottom:2px solid var(--line)}
+.itab{font:inherit;border:1px solid var(--line);border-bottom:0;background:#f3f6fb;color:var(--muted,#5a6b85);padding:8px 16px;border-radius:10px 10px 0 0;cursor:pointer;margin-bottom:-2px}
+.itab b{display:inline-block;min-width:22px;text-align:center;background:#dfe6f1;color:var(--navy);border-radius:99px;padding:0 7px;margin-left:4px;font-size:.82rem}
+.itab[aria-selected="true"]{background:#fff;color:var(--navy);font-weight:700;border-color:var(--line);border-bottom:2px solid #fff}
+.itab[aria-selected="true"] b{background:var(--navy);color:#fff}
+.itab.rej[aria-selected="true"] b{background:#c0392b}
+.ibox{border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:12px;background:#fff}
+.itools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.itools .sp{flex:1}
+.itbl{max-height:640px;overflow:auto}
+.itbl table{font-size:.82rem;min-width:1700px}
+.itbl thead th{position:sticky;top:0;background:#1e3a6e;color:#fff;z-index:2;white-space:nowrap;font-weight:600}
+.itbl td{vertical-align:top}
+.itbl .cchk{width:34px;text-align:center}
+.itbl .ttl{min-width:240px;max-width:320px}
+.itbl .ttl .linkbtn{font-weight:700;text-align:left;color:var(--navy)}
+.itbl .grpc{min-width:180px}
+.itbl .tamc{min-width:140px}
+.itbl .vcol{min-width:200px}
+.itbl .acts-c{white-space:nowrap}
+.itbl .acts-c .btn{margin:0 2px 4px 0}
+.itbl tr.rsel td{background:#fdf2f7}
+.itbl tr.rbad td.vcol{background:#fff5f4}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+.vok{color:#2f8a54;font-weight:700;white-space:nowrap}
+.vbad{color:#c0392b;font-weight:700;white-space:nowrap}
+.verr{color:#7a1f14;font-size:.78rem;margin-top:3px;line-height:1.45}
+.qreason{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.itbl td.num,.itbl td:nth-child(13){white-space:nowrap}
+.itbl td:nth-child(14){min-width:150px}

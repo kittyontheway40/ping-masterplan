@@ -14,12 +14,13 @@ const SHEX = {1:'#2f7fc1',2:'#4c9a56',3:'#d0862a',4:'#23938a',5:'#7656a8'};
 const TGHEX = '#e07b39';
 const PAGE = 40;
 
-let M, T = {}, P = [], SEED = [], SUBS = [], AUDIT = [];
+let M, T = {}, P = [], SEED = [], SUBS = [], REJ = [], AUDIT = [];
 let IDX = {byTam:{}, byBasin:{}}, MEAS = {}, PROG = {}, STRAT = {}, BAS = {};
 const S = {
   tab:'area', prov:null, amp:null, tam:null, basin:null,
   f:{q:'', s:new Set(), F:'', S:'', grp:'', src:'', stage:''},
-  admin:false, user:null, seedFallback:false
+  admin:false, user:null, seedFallback:false,
+  adminTab:'pending', sel:new Set()
 };
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
@@ -40,6 +41,8 @@ function toast(msg){
   const el = document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el);
   setTimeout(()=>el.remove(), 3200);
 }
+function normSub(o){ if(!o.grp && /^grp:/.test(o.ref||'')){ o.grp=o.ref.slice(4); o.ref=''; } return o; }
+const tsOf = x => x?.seconds ? x.seconds*1000 : (typeof x==='number' ? x : (x ? Date.parse(x)||0 : 0));
 function normProj(p){
   return Object.assign({id:'',seq:0,sb:'',ref:'',s:null,F:'',S:'',grp:'',title:'',detail:'',tambons:[],agency:'',budget:null,yearStart:null,yearEnd:null,status:'',note:'',src:'excel'}, p);
 }
@@ -68,6 +71,7 @@ const Store = {
     const o = LS.get('ping_overrides', {edited:{}, added:[], deleted:[]});
     P = SEED.filter(p=>!o.deleted.includes(p.id)).map(p=> normProj(o.edited[p.id] || p)).concat(o.added.map(normProj));
     SUBS = LS.get('ping_subs', []).filter(s=>s.review==='pending');
+    REJ = LS.get('ping_subs', []).filter(s=>s.review==='rejected').sort((a,b)=>tsOf(b.reviewedAt)-tsOf(a.reviewedAt));
     AUDIT = LS.get('ping_audit', []);
     const ss = Sess.get(); if(ss && ss.role==='admin'){ S.admin=true; S.user={email: ss.name || 'ผู้ดูแลระบบ'}; }
     onData();
@@ -89,7 +93,8 @@ const Store = {
         try{ await this.db.collection('submissions').limit(1).get(); S.admin = true; }catch(e){ S.admin=false; S.permErr = e.code||e.message; }
         if(!S.admin){ toast('บัญชีนี้ยังไม่ได้รับสิทธิ์ผู้ดูแลระบบ'); }
         else {
-          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>{ const o=Object.assign({_id:d.id}, d.data()); if(!o.grp && /^grp:/.test(o.ref||'')){ o.grp=o.ref.slice(4); o.ref=''; } return o; }).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); renderHeader(); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','pending').onSnapshot(s=>{ SUBS = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.createdAt)-tsOf(a.createdAt)); renderHeader(); if(S.tab==='admin') renderView(); }));
+          this.unsub.push(this.db.collection('submissions').where('review','==','rejected').onSnapshot(s=>{ REJ = s.docs.map(d=>normSub(Object.assign({_id:d.id}, d.data()))).sort((a,b)=>tsOf(b.reviewedAt)-tsOf(a.reviewedAt)); if(S.tab==='admin') renderView(); }));
           this.unsub.push(this.db.collection('audit').orderBy('ts','desc').limit(60).onSnapshot(s=>{ AUDIT = s.docs.map(d=>d.data()); if(S.tab==='admin') renderView(); }));
         }
       }
@@ -135,9 +140,9 @@ const Store = {
     await this.seed();
     S.seedFallback = false;
   },
-  async approve(sub, data){
+  async approve(sub, data, forced){
     await this.ensureSeeded();
-    const {id, seq} = this.nextId();
+    const {id, seq} = forced || this.nextId();
     const proj = normProj(Object.assign({}, pickProj(data), {id, seq, src:'new', proposer:sub.proposer||'', proposerOrg:sub.proposerOrg||'', proposerContact:sub.proposerContact||'', approvedBy:S.user?.email||'', approvedAt:new Date().toISOString()}));
     if(this.mode==='demo'){
       const a = LS.get('ping_subs', []); const s = a.find(x=>x._id===sub._id); if(s){ s.review='approved'; s.projectId=id; } LS.set('ping_subs', a);
@@ -150,15 +155,34 @@ const Store = {
     b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'อนุมัติโครงการใหม่', id, detail:proj.title});
     await b.commit(); return id;
   },
-  async reject(sub, reason){
+  async reject(sub, reason){ return this.rejectMany([sub], reason); },
+  async rejectMany(list, reason){
     if(this.mode==='demo'){
-      const a = LS.get('ping_subs', []); const s = a.find(x=>x._id===sub._id); if(s){ s.review='rejected'; s.reason=reason; } LS.set('ping_subs', a); SUBS=a.filter(s=>s.review==='pending');
-      this.demoAudit('ไม่อนุมัติ', sub._id, sub.title+(reason?' — '+reason:'')); AUDIT=LS.get('ping_audit',[]); renderHeader(); renderView(); return;
+      const a = LS.get('ping_subs', []); const ids=new Set(list.map(x=>x._id));
+      a.forEach(s=>{ if(ids.has(s._id)){ s.review='rejected'; s.reason=reason||''; s.reviewedBy=S.user?.email||'ผู้ดูแลระบบ'; s.reviewedAt=Date.now(); } }); LS.set('ping_subs', a);
+      list.forEach(x=>this.demoAudit('ไม่อนุมัติ', x._id, x.title+(reason?' — '+reason:''))); this.initDemo(); return;
     }
-    const b = this.db.batch();
-    b.update(this.db.doc('submissions/'+sub._id), {review:'rejected', reason:reason||'', reviewedBy:S.user.email, reviewedAt:firebase.firestore.FieldValue.serverTimestamp()});
-    b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ไม่อนุมัติ', id:sub._id, detail:sub.title+(reason?' — '+reason:'')});
-    await b.commit();
+    for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
+      list.slice(i,i+200).forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'rejected', reason:reason||'', reviewedBy:S.user.email, reviewedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ไม่อนุมัติ', id:x._id, detail:x.title+(reason?' — '+reason:'')}); });
+      await b.commit(); }
+  },
+  async restoreMany(list){
+    if(this.mode==='demo'){
+      const a = LS.get('ping_subs', []); const ids=new Set(list.map(x=>x._id));
+      a.forEach(s=>{ if(ids.has(s._id)){ s.review='pending'; } }); LS.set('ping_subs', a);
+      list.forEach(x=>this.demoAudit('นำกลับไปพิจารณาใหม่', x._id, x.title)); this.initDemo(); return;
+    }
+    for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
+      list.slice(i,i+200).forEach(x=>{ b.update(this.db.doc('submissions/'+x._id), {review:'pending'});
+        b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'นำกลับไปพิจารณาใหม่', id:x._id, detail:x.title}); });
+      await b.commit(); }
+  },
+  async approveMany(list){
+    await this.ensureSeeded();
+    let {seq} = this.nextId(); const ids=[];
+    for(const x of list){ const id='P'+String(seq).padStart(4,'0'); await this.approve(x, x, {id, seq}); ids.push(id); seq++; }
+    return ids;
   },
   async saveProject(id, data){
     const old = P.find(p=>p.id===id);
@@ -782,6 +806,73 @@ function mapPick(id, noZoom, noPopup, latlng){
 }
 
 /* ================= VIEW: ADMIN ================= */
+/* ---------- กล่องรอพิจารณา / ถังไม่ผ่านอนุมัติ (ตาราง) ---------- */
+function subLoc(x){ const ts=(x.tambons||[]).map(id=>T[id]).filter(Boolean); const u=a=>[...new Set(a)]; return {p:u(ts.map(t=>t.p)), a:u(ts.map(t=>t.a)), t:ts.map(t=>t.t)}; }
+function subErrs(x){ return validateRec(subToVal(x), {proposer:true, legacy:true, allowNoGrp: !x.grp && !!(x.F||x.S)}); }
+function adminInbox(){
+  const tab=S.adminTab, list = tab==='rejected' ? REJ : SUBS;
+  [...S.sel].forEach(id=>{ if(!list.some(x=>x._id===id)) S.sel.delete(id); });
+  const nSel=S.sel.size, allSel = list.length && list.every(x=>S.sel.has(x._id));
+  const dt = v => { const t=tsOf(v); return t ? new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})+'<br><span class="sub">'+new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+'</span>' : ''; };
+  const rows = list.map((x,i)=>{ const L=subLoc(x), errs = tab==='pending' ? subErrs(x) : [], id=esc(x._id);
+    const chk = errs.length ? `<span class="vbad" title="${esc(errs.map(e=>`${FIELD_LABEL[e.f]}: ${e.msg}`).join('\n'))}">⚠ ${errs.length} จุด</span><div class="verr">${errs.slice(0,3).map(e=>`<div>• <b>${esc(FIELD_LABEL[e.f])}</b> ${esc(e.msg)}</div>`).join('')}${errs.length>3?`<div class="sub">…และอีก ${errs.length-3} จุด</div>`:''}</div>` : '<span class="vok">✓ ครบถ้วน</span>';
+    const acts = tab==='pending'
+      ? `<button class="btn sm primary" data-act="approve" data-sid="${id}" ${errs.length?'disabled title="มีข้อผิดพลาด กด “ตรวจ/แก้ไข” ก่อนอนุมัติ"':''}>อนุมัติ</button><button class="btn sm" data-act="review" data-sid="${id}">ตรวจ/แก้ไข</button><button class="btn sm danger" data-act="reject" data-sid="${id}">ไม่อนุมัติ</button>`
+      : `<button class="btn sm" data-act="restore" data-sid="${id}">นำกลับไปพิจารณา</button>`;
+    return `<tr class="${S.sel.has(x._id)?'rsel':''} ${errs.length?'rbad':''}">
+      <td class="cchk"><input type="checkbox" data-act="selsub" data-sid="${id}" ${S.sel.has(x._id)?'checked':''} aria-label="เลือกแถว ${i+1}"></td>
+      <td class="num sub">${i+1}</td>
+      <td class="num">${dt(tab==='rejected'?x.reviewedAt:x.createdAt)}</td>
+      <td class="ttl"><button class="linkbtn" data-act="${tab==='pending'?'review':'viewsub'}" data-sid="${id}">${esc(x.title||'(ไม่มีชื่อ)')}</button>${x.detail?`<div class="sub clamp2">${esc(x.detail)}</div>`:''}</td>
+      <td>${x.s?sPill(x.s):'<span class="sub">–</span>'}</td>
+      <td class="grpc">${x.grp?`<span class="gcode f${'WPREG'.indexOf(x.grp[0])+1}">${esc(x.grp)}</span> <span>${esc(M.groups[x.grp]||'')}</span>`:esc([x.F,x.S].filter(Boolean).join(' / '))||'<span class="sub">–</span>'}</td>
+      <td>${esc(L.p.join(', '))}</td><td>${esc(L.a.join(', '))}</td><td class="tamc">${esc(L.t.join(', '))}</td>
+      <td>${esc(x.agency||'')}</td>
+      <td class="num">${x.budget!=null&&x.budget!==''?toBaht(x.budget).toLocaleString('th-TH'):''}</td>
+      <td class="num">${x.yearStart||x.yearEnd?`${esc(x.yearStart||'?')}–${esc(x.yearEnd||'?')}`:''}</td>
+      <td>${esc(LEGACY[x.status]||x.status||'')}</td>
+      <td>${propLine(x)}${x.proposerContact?`<div class="sub">${esc(x.proposerContact)}</div>`:''}</td>
+      ${tab==='pending'?`<td class="vcol">${chk}</td>`:`<td>${esc(x.reason||'–')}</td><td class="sub">${esc(x.reviewedBy||'')}</td>`}
+      <td class="acts-c">${acts}</td></tr>`; }).join('');
+  const head = `<tr><th class="cchk"><input type="checkbox" data-act="selall" ${allSel?'checked':''} aria-label="เลือกทั้งหมด"></th><th>#</th><th>${tab==='rejected'?'วันที่ไม่อนุมัติ':'วันที่ส่ง'}</th><th>ชื่อแนวทาง/โครงการ</th><th>ยศ.</th><th>สภาพพื้นที่</th><th>จังหวัด</th><th>อำเภอ</th><th>ตำบล</th><th>หน่วยงานรับผิดชอบ</th><th>งบประมาณ (บาท)</th><th>ปี พ.ศ.</th><th>สถานะ</th><th>ผู้เสนอ</th>${tab==='pending'?'<th>ผลตรวจข้อมูล</th>':'<th>เหตุผลที่ไม่อนุมัติ</th><th>ผู้พิจารณา</th>'}<th>จัดการ</th></tr>`;
+  const nBad = tab==='pending' ? SUBS.filter(x=>subErrs(x).length).length : 0;
+  const tools = tab==='pending'
+    ? `<button class="btn sm primary" data-act="approvesel" ${nSel?'':'disabled'}>อนุมัติที่เลือก${nSel?` (${nSel})`:''}</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>ไม่อนุมัติที่เลือก${nSel?` (${nSel})`:''}</button>`
+    : `<button class="btn sm" data-act="restoresel" ${nSel?'':'disabled'}>นำกลับไปพิจารณาที่เลือก${nSel?` (${nSel})`:''}</button>`;
+  return `<div class="sec-h" style="margin-top:0"><h2>คัดกรองโครงการที่เสนอเข้ามา</h2><span class="note">โครงการจะแสดงให้ทุกคนเห็นเมื่อผู้ดูแลอนุมัติแล้วเท่านั้น</span></div>
+  <div class="itabs" role="tablist"><button class="itab" role="tab" data-act="subtab" data-v="pending" aria-selected="${tab==='pending'}">กล่องรอพิจารณา <b>${SUBS.length}</b></button><button class="itab rej" role="tab" data-act="subtab" data-v="rejected" aria-selected="${tab==='rejected'}">ถังโครงการที่ไม่ผ่านอนุมัติ <b>${REJ.length}</b></button></div>
+  <div class="ibox">
+  ${list.length?`<div class="itools">${tools}<span class="sp"></span>${nBad?`<span class="vbad">⚠ มีข้อมูลต้องแก้ไข ${nBad} รายการ (อนุมัติไม่ได้จนกว่าจะแก้)</span>`:''}<button class="btn sm" data-act="subxls">ดาวน์โหลดรายการเป็น Excel</button></div>
+  <div class="tbl-wrap itbl"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`
+  : `<div class="empty">${tab==='pending'?'ไม่มีโครงการรอพิจารณา':'ยังไม่มีโครงการที่ไม่ผ่านอนุมัติ'}</div>`}
+  ${tab==='rejected'&&list.length?'<div class="note" style="margin-top:6px">โครงการในถังนี้ไม่แสดงในระบบ กด “นำกลับไปพิจารณา” เพื่อย้ายกลับไปกล่องรอพิจารณา</div>':''}
+  </div>`;
+}
+function openRejectModal(list){
+  const QUICK=['ข้อมูลไม่ครบถ้วน','อยู่นอกขอบเขตลุ่มน้ำปิง','ซ้ำกับโครงการที่มีอยู่แล้ว','ไม่สอดคล้องกับยุทธศาสตร์/สภาพพื้นที่','ข้อมูลไม่ถูกต้อง'];
+  modal(`<div class="modal-h"><div><h2>ไม่อนุมัติ ${list.length>1?list.length+' โครงการ':'โครงการ'}</h2><div class="note">โครงการจะถูกย้ายไป “ถังโครงการที่ไม่ผ่านอนุมัติ” และนำกลับมาพิจารณาใหม่ได้</div></div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  <div class="modal-b">
+    <div class="note-box">${list.slice(0,5).map(x=>'• '+esc(x.title)).join('<br>')}${list.length>5?`<br>…และอีก ${list.length-5} โครงการ`:''}</div>
+    <div class="fld"><label for="rj_reason">เหตุผล (ไม่บังคับ)</label><textarea id="rj_reason" rows="3" maxlength="500"></textarea>
+    <div class="qreason">${QUICK.map(q=>`<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>
+  </div>
+  <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn danger" id="rj_ok">ยืนยันไม่อนุมัติ</button></div>`);
+  $('.qreason').onclick = e=>{ const b=e.target.closest('[data-q]'); if(!b) return; const t=$('#rj_reason'); t.value = t.value ? t.value.replace(/\s*$/,'')+' · '+b.dataset.q : b.dataset.q; };
+  $('#rj_ok').onclick = async ()=>{ const b=$('#rj_ok'); b.disabled=true; b.textContent='กำลังบันทึก…';
+    try{ await Store.rejectMany(list, $('#rj_reason').value.trim()); list.forEach(x=>S.sel.delete(x._id)); closeModal(); toast(`ย้าย ${list.length} โครงการไปถังไม่ผ่านอนุมัติแล้ว`); renderView(); }
+    catch(err){ b.disabled=false; b.textContent='ลองอีกครั้ง'; toast('ไม่สำเร็จ: '+err.message); } };
+}
+function subXlsx(){
+  if(!window.XLSX){ toast('ยังโหลดตัวส่งออกไม่เสร็จ ลองใหม่อีกครั้ง'); return; }
+  const rej=S.adminTab==='rejected', list=rej?REJ:SUBS;
+  const rows=list.map((x,i)=>{ const L=subLoc(x); const o={'ลำดับ':i+1,'ชื่อแนวทาง/โครงการ':x.title,'รายละเอียด':x.detail||'','ยุทธศาสตร์':x.s?`${x.s} ${STRAT[x.s]?.short||''}`:'','สภาพพื้นที่':x.grp?`${x.grp} ${M.groups[x.grp]||''}`:'',
+    'จังหวัด':L.p.join(', '),'อำเภอ':L.a.join(', '),'ตำบล':L.t.join(', '),'หน่วยงานรับผิดชอบ':x.agency||'','งบประมาณ (บาท)':toBaht(x.budget),'ปีเริ่ม (พ.ศ.)':x.yearStart||'','ปีสิ้นสุด (พ.ศ.)':x.yearEnd||'','สถานะ':LEGACY[x.status]||x.status||'','หมายเหตุ':x.note||'',
+    'ผู้เสนอ':x.proposer||'','หน่วยงาน/ชุมชนผู้เสนอ':x.proposerOrg||'','ติดต่อ':x.proposerContact||'','วันที่ส่ง':tsOf(x.createdAt)?new Date(tsOf(x.createdAt)).toLocaleString('th-TH'):''};
+    if(rej){ o['เหตุผลที่ไม่อนุมัติ']=x.reason||''; o['ผู้พิจารณา']=x.reviewedBy||''; } else { o['ผลตรวจข้อมูล']=subErrs(x).map(e=>`${FIELD_LABEL[e.f]}: ${e.msg}`).join('; ')||'ครบถ้วน'; } return o; });
+  const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[6,44,40,26,34,12,14,26,22,14,10,10,14,20,20,24,16,18,40].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, rej?'ไม่ผ่านอนุมัติ':'รอพิจารณา');
+  XLSX.writeFile(wb, `${rej?'โครงการไม่ผ่านอนุมัติ':'โครงการรอพิจารณา'}_ลุ่มน้ำปิง_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 function renderAdmin(){
   const el = $('#view');
   if(!S.admin && S.user && Store.mode!=='demo'){
@@ -807,17 +898,9 @@ function renderAdmin(){
 </div>`;
     return;
   }
-  const subs = SUBS.map(s=>`<div class="sub-card" data-sid="${esc(s._id)}">
-    <div style="display:flex;gap:8px;align-items:start;flex-wrap:wrap"><span class="pill pending">รอพิจารณา</span>${sPill(s.s)}<b style="flex:1;min-width:200px">${esc(s.title)}</b></div>
-    <div class="meta">ลุ่มน้ำ${esc(s.sb)} · ${s.grp?`สภาพพื้นที่ ${esc(s.grp)} ${esc(M.groups[s.grp]||'')}`:[s.F,s.S].filter(Boolean).map(esc).join(' / ')} · ${(s.tambons||[]).length ? (s.tambons||[]).map(id=>'ต.'+(T[id]?.t||id)).join(', ') : 'ไม่ระบุตำบล'}</div>
-    ${s.detail?`<div style="font-size:.88rem">${esc(s.detail)}</div>`:''}
-    <div class="meta">เสนอโดย ${propLine(s)}${s.proposerContact?' · '+esc(s.proposerContact):''} · ${s.createdAt?.seconds?new Date(s.createdAt.seconds*1000).toLocaleString('th-TH'):''}</div>
-    <div class="acts"><button class="btn sm primary" data-act="approve" data-sid="${esc(s._id)}">อนุมัติ</button><button class="btn sm" data-act="review" data-sid="${esc(s._id)}">ตรวจ/แก้ไขก่อนอนุมัติ</button><button class="btn sm danger" data-act="reject" data-sid="${esc(s._id)}">ไม่อนุมัติ</button></div>
-    <div class="rej" hidden><div class="confirm-box"><input id="rr_${esc(s._id)}" placeholder="เหตุผล (ถ้ามี)" style="flex:1;min-width:160px;border:1px solid var(--line-2);border-radius:6px;padding:5px 8px"><button class="btn sm danger" data-act="rejectok" data-sid="${esc(s._id)}">ยืนยันไม่อนุมัติ</button><button class="btn sm" data-act="rejectno">ยกเลิก</button></div></div>
-  </div>`).join('');
+  const inbox = adminInbox();
   const aud = AUDIT.slice(0,40).map(a=>{ const ts = a.ts?.seconds ? a.ts.seconds*1000 : a.ts; return `<tr><td class="num sub">${ts?new Date(ts).toLocaleString('th-TH'):''}</td><td>${esc(a.by)}</td><td>${esc(a.action)}</td><td class="num">${esc(a.id)}</td><td>${esc(a.detail)}</td></tr>`; }).join('');
-  el.innerHTML = `<div class="sec-h" style="margin-top:0"><h2>กล่องรอพิจารณา (${SUBS.length})</h2><span class="note">โครงการที่มีผู้เสนอเข้ามาจะยังไม่แสดงให้ทุกคนเห็น จนกว่าผู้ดูแลจะอนุมัติ</span></div>
-  <div class="stack">${subs || '<div class="empty">ไม่มีโครงการรอพิจารณา</div>'}</div>
+  el.innerHTML = `${inbox}
   ${S.seedFallback?`<div class="info" style="margin-top:18px;border-color:var(--pink)"><h3>ฐานข้อมูลออนไลน์ยังว่าง</h3><p class="note">ตอนนี้หน้าเว็บแสดงข้อมูลตั้งต้นจากไฟล์ Excel แบบอ่านอย่างเดียว กดปุ่มนี้หนึ่งครั้งเพื่อนำเข้า ${fmt(SEED.length)} โครงการลงฐานข้อมูล ก่อนจึงจะแก้ไขได้</p><button class="btn pink" data-act="seed">นำเข้าข้อมูลตั้งต้น</button> <span id="seedProg" class="note"></span></div>`:''}
   ${!S.seedFallback && seedDiffCount() ? `<div class="info" style="margin-top:18px;border-color:var(--blue)"><h3>มีข้อมูลแผนแม่บทฉบับใหม่</h3><p class="note">โครงการในฐานข้อมูล ${fmt(seedDiffCount())} รายการต่างจากไฟล์ Excel ฉบับล่าสุด (เช่น แผนงาน มาตรการ ชื่อ หรือตำบลเป้าหมาย) กดอัปเดตเพื่อใช้ข้อมูลตามไฟล์ใหม่ · ระบบจะคงสถานะ หน่วยงาน งบประมาณ ปี และหมายเหตุที่ผู้ดูแลกรอกไว้ และไม่แตะโครงการที่เพิ่มใหม่ผ่านเว็บ</p><button class="btn primary" data-act="syncseed">อัปเดตตาม Excel ฉบับใหม่</button> <span id="syncProg" class="note"></span></div>` : ''}
   <div class="sec-h"><h2>เครื่องมือข้อมูล</h2></div>
@@ -855,7 +938,7 @@ function openProject(id){
       <dt>ตำบลเป้าหมาย</dt><dd>${tams.length ? tams.map(t=>`<button class="linkbtn" data-act="gotamfull" data-v="${t.id}">${esc(tamName(t))}</button>`).join('<br>') : 'ไม่มีตำบลเป้าหมายตามยุทธศาสตร์นี้ (แนวทางระดับลุ่มน้ำสาขา)'}</dd>
       <dt>กลุ่มพื้นที่</dt><dd>${grp.length ? grp.map(g=>`<span class="pill code" title="${esc(M.groups[g]||'')}">${g}</span>`).join(' ') : (MEAS[p.S]?.groups?`<span class="note">ตามมาตรการ: ${esc(MEAS[p.S].groups)}</span>`:'–')}</dd>
       <dt>หน่วยงานรับผิดชอบ</dt><dd>${esc(p.agency)||'–'}</dd>
-      <dt>งบประมาณ</dt><dd class="num">${p.budget!=null&&p.budget!==''?fmt(p.budget)+' ล้านบาท':'–'}</dd>
+      <dt>งบประมาณ</dt><dd class="num">${fmtBaht(p.budget)}</dd>
       <dt>ระยะเวลา</dt><dd class="num">${p.yearStart||p.yearEnd?`พ.ศ. ${esc(p.yearStart||'?')} – ${esc(p.yearEnd||'?')}`:'–'}</dd>
       <dt>สถานะ</dt><dd>${stageOf(p)==='ยังไม่ระบุ'?'<span class="note">ยังไม่ระบุ</span>':esc(stageOf(p))}</dd>
       ${p.note?`<dt>หมายเหตุ</dt><dd>${esc(p.note)}</dd>`:''}
@@ -866,6 +949,46 @@ function openProject(id){
   </div>
   <div class="modal-f">${S.admin?`<button class="btn danger" data-act="del" data-pid="${p.id}">ลบโครงการ</button><button class="btn primary" data-act="edit" data-pid="${p.id}">แก้ไขข้อมูล</button>`:`<span class="note" style="margin-right:auto">ผู้ดูแลระบบเท่านั้นที่แก้ไขข้อมูลได้</span>`}<button class="btn" data-act="close">ปิด</button></div>`);
 }
+
+/* ---------- งบประมาณ (เก็บในฐานข้อมูลเป็นล้านบาท แสดง/กรอกเป็นบาท) ---------- */
+const toBaht = m => (m==null || m==='') ? null : Math.round(+m*1e6);
+const fmtBaht = m => { const b=toBaht(m); return b==null ? '–' : b.toLocaleString('th-TH')+' บาท'; };
+const parseBaht = v => { const t=String(v??'').replace(/[,\s]|บาท/g,''); if(t==='') return null; const n=Number(t); return isFinite(n) ? n : NaN; };
+const STATUS_HELP = {'เตรียมการ':'ยังไม่เริ่มดำเนินการ — อยู่ระหว่างคิดโครงการ ศึกษา ออกแบบ หรือเสนอขอรับงบประมาณ (โครงการที่ยื่นเสนอใหม่ส่วนใหญ่เลือกข้อนี้)',
+  'กำลังดำเนินการ':'ได้รับงบประมาณและเริ่มดำเนินการแล้ว', 'โครงการต่อเนื่อง':'ดำเนินการมาแล้วในปีก่อน และเสนอเพื่อดำเนินการต่อในระยะถัดไป', 'แล้วเสร็จ':'ดำเนินการเสร็จสิ้นแล้ว'};
+/* ---------- ตรวจความถูกต้องของข้อมูลโครงการ (ใช้ทั้งฟอร์ม Excel และกล่องรอพิจารณา) ---------- */
+const FIELD_LABEL = {ptype:'ผู้เสนอเป็น', org:'ชื่อหน่วยงาน/องค์กร', contact:'อีเมลหรือโทรศัพท์', tambons:'ตำบล', s:'ยุทธศาสตร์', grp:'สภาพพื้นที่', title:'ชื่อแนวทาง/โครงการ', detail:'รายละเอียด', agency:'หน่วยงานรับผิดชอบ', budget:'งบประมาณ (บาท)', yearStart:'ปีเริ่ม (พ.ศ.)', yearEnd:'ปีสิ้นสุด (พ.ศ.)', status:'สถานะ'};
+function validateRec(r, o={}){
+  // r: {s, grp, title, detail, tambons, agency, budgetBaht, yearStart, yearEnd, status, proposer, proposerOrg, proposerContact}
+  const E=[]; const add=(f,msg)=>E.push({f,msg});
+  if(o.proposer){
+    if(!r.proposer) add('ptype','กรุณาเลือกประเภทผู้เสนอ');
+    else if(!PROPOSER_TYPES.includes(r.proposer) && !o.legacy) add('ptype','ประเภทผู้เสนอไม่อยู่ในรายการ');
+    if(r.proposer && r.proposer!==CITIZEN && !(r.proposerOrg||'').trim()) add('org','กรุณากรอกชื่อหน่วยงาน/องค์กร');
+    else if((r.proposerOrg||'').length>200) add('org','ชื่อหน่วยงานยาวเกิน 200 ตัวอักษร');
+    const c=(r.proposerContact||'').trim();
+    if(c && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c) && !/^[0-9+\-()\s]{9,20}$/.test(c)) add('contact','รูปแบบไม่ถูกต้อง — ใส่อีเมล (เช่น name@mail.com) หรือเบอร์โทร 9–10 หลัก');
+  }
+  if(!o.allowNoTambon && !(r.tambons||[]).length) add('tambons','กรุณาเลือกตำบลอย่างน้อย 1 ตำบล');
+  if((r.tambons||[]).length>120) add('tambons','เลือกได้ไม่เกิน 120 ตำบลต่อโครงการ');
+  if((r.tambons||[]).some(id=>!T[id])) add('tambons','มีรหัสตำบลที่ไม่อยู่ในลุ่มน้ำปิง');
+  if(!r.s) add('s','กรุณาเลือกยุทธศาสตร์');
+  if(!r.grp){ if(!o.allowNoGrp) add('grp', r.s ? 'กรุณาเลือกสภาพพื้นที่' : 'เลือกยุทธศาสตร์ก่อน แล้วเลือกสภาพพื้นที่'); }
+  else if(!M.groups[r.grp]) add('grp',`ไม่มีรหัสสภาพพื้นที่ ${r.grp}`);
+  else if(r.s && r.grp[0]!==famOf(r.s)) add('grp',`สภาพพื้นที่ ${r.grp} ไม่อยู่ในยุทธศาสตร์ที่ ${r.s} (ต้องเป็นรหัส ${famOf(r.s)})`);
+  const t=(r.title||'').trim();
+  if(!t) add('title','กรุณากรอกชื่อแนวทาง/โครงการ'); else if(t.length<5) add('title','ชื่อสั้นเกินไป (อย่างน้อย 5 ตัวอักษร)'); else if(t.length>300) add('title','ชื่อยาวเกิน 300 ตัวอักษร');
+  if((r.detail||'').length>3000) add('detail','รายละเอียดยาวเกิน 3,000 ตัวอักษร');
+  if((r.agency||'').length>200) add('agency','ชื่อหน่วยงานยาวเกิน 200 ตัวอักษร');
+  const b=r.budgetBaht;
+  if(b!=null){ if(Number.isNaN(b)) add('budget','ใส่เป็นตัวเลขเท่านั้น เช่น 250000 หรือ 1,250,000'); else if(b<0) add('budget','งบประมาณต้องไม่ติดลบ'); else if(b>0 && b<100) add('budget','ตัวเลขน้อยผิดปกติ — กรอกเป็นหน่วย “บาท” เช่น 1.5 ล้านบาท ให้กรอก 1500000'); else if(b>1e11) add('budget','ตัวเลขสูงผิดปกติ — ตรวจหน่วย (บาท)'); }
+  const yr=(k,lbl)=>{ const v=r[k]; if(v==null||v==='') return null; if(Number.isNaN(+v)||!Number.isInteger(+v)) { add(k,`${lbl}ต้องเป็นตัวเลขปี พ.ศ. เช่น 2570`); return null; } if(+v<2500) { add(k,`ใช้ปี พ.ศ. ไม่ใช่ ค.ศ. (เช่น 2570)`); return null; } if(+v<2560||+v>2600){ add(k,`${lbl}ควรอยู่ระหว่าง 2560–2600`); return null; } return +v; };
+  const ys=yr('yearStart','ปีเริ่ม'), ye=yr('yearEnd','ปีสิ้นสุด');
+  if(ys&&ye&&ye<ys) add('yearEnd','ปีสิ้นสุดต้องไม่น้อยกว่าปีเริ่ม');
+  if(r.status && !STATUS_OPTS.includes(LEGACY[r.status]||r.status)) add('status',`สถานะ “${r.status}” ไม่อยู่ในตัวเลือก`);
+  return E;
+}
+const subToVal = x => Object.assign({}, x, {budgetBaht: toBaht(x.budget)});
 /* ---------- ฟอร์มเสนอ/แก้ไขโครงการ ---------- */
 const PROPOSER_TYPES = ['หน่วยงานภาครัฐ','องค์กรปกครองส่วนท้องถิ่น','ภาคเอกชน/สถาบันการศึกษา','ชุมชน/กลุ่มองค์กร','ประชาชนทั่วไป'];
 const CITIZEN = 'ประชาชนทั่วไป';
@@ -920,10 +1043,10 @@ function openForm(mode, data={}, sub=null){
     </div>
     <div class="formsec">ข้อมูลประกอบ</div><div class="form-grid">
       <div class="fld"><label for="ff_agency">หน่วยงานรับผิดชอบ</label><input id="ff_agency" value="${esc(d.agency)}"></div>
-      <div class="fld"><label for="ff_budget">งบประมาณ (ล้านบาท)</label><input id="ff_budget" type="number" min="0" step="0.01" value="${esc(d.budget??'')}"></div>
+      <div class="fld"><label for="ff_budget">งบประมาณ (บาท)</label><input id="ff_budget" inputmode="decimal" placeholder="เช่น 250,000" value="${d.budget!=null&&d.budget!==''?toBaht(d.budget).toLocaleString('en-US'):''}"><div class="note" id="ff_budgetHint"></div></div>
       <div class="fld"><label for="ff_yearStart">ปีเริ่ม (พ.ศ.)</label><input id="ff_yearStart" type="number" min="2560" max="2600" value="${esc(d.yearStart??'')}"></div>
       <div class="fld"><label for="ff_yearEnd">ปีสิ้นสุด (พ.ศ.)</label><input id="ff_yearEnd" type="number" min="2560" max="2600" value="${esc(d.yearEnd??'')}"></div>
-      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${(LEGACY[d.status]||d.status)===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="fld"><label for="ff_status">สถานะ</label><select id="ff_status"><option value="">ไม่ระบุ</option>${STATUS_OPTS.map(o=>`<option ${((LEGACY[d.status]||d.status)||(mode==='new'?'เตรียมการ':''))===o?'selected':''}>${o}</option>`).join('')}</select><div class="note" id="ff_statusHint"></div></div>
       <div class="fld full"><label for="ff_note">หมายเหตุ</label><input id="ff_note" value="${esc(d.note)}"></div>
     </div>
     <div class="err" id="ff_err" role="alert"></div>
@@ -989,22 +1112,35 @@ function openForm(mode, data={}, sub=null){
   if(t0){ $('#ff_prov').value=t0.p; fillAmp(); $('#ff_amp').value=t0.a; }
   fillT();
 
+  /* คำแนะนำสถานะ + งบประมาณ */
+  const stHint = ()=>{ const v=$('#ff_status').value; $('#ff_statusHint').textContent = v ? STATUS_HELP[v]||'' : 'โครงการที่ยื่นเสนอใหม่ (ยังไม่เริ่ม) ให้เลือก “เตรียมการ”'; };
+  $('#ff_status').addEventListener('change', stHint); stHint();
+  const bHint = ()=>{ const b=parseBaht($('#ff_budget').value); $('#ff_budgetHint').textContent = (b && !Number.isNaN(b)) ? `= ${b.toLocaleString('th-TH')} บาท${b>=1e6?` (${(b/1e6).toLocaleString('th-TH',{maximumFractionDigits:2})} ล้านบาท)`:''}` : ''; };
+  $('#ff_budget').addEventListener('input', bHint); $('#ff_budget').addEventListener('blur', ()=>{ const b=parseBaht($('#ff_budget').value); if(b!=null && !Number.isNaN(b)) $('#ff_budget').value=b.toLocaleString('en-US'); bHint(); }); bHint();
+  /* แสดงข้อผิดพลาดรายช่อง */
+  const FIELD_EL = {ptype:'#ff_ptype', org:'#ff_proposerOrg', contact:'#ff_proposerContact', tambons:'#ff_tams', s:'#ff_s', grp:'#ff_gpBtn', title:'#ff_title', detail:'#ff_detail', agency:'#ff_agency', budget:'#ff_budget', yearStart:'#ff_yearStart', yearEnd:'#ff_yearEnd', status:'#ff_status'};
+  const clearErr = ()=>{ $$('.modal .ferr').forEach(e=>e.remove()); $$('.modal .invalid').forEach(e=>e.classList.remove('invalid')); $('#ff_err').innerHTML=''; };
+  const showErr = errs=>{ clearErr(); errs.forEach(e=>{ const el=$(FIELD_EL[e.f]); if(!el) return; el.classList.add('invalid'); const m=document.createElement('div'); m.className='ferr'; m.dataset.f=e.f; m.textContent='⚠ '+e.msg; (el.closest('.gpick')||el).insertAdjacentElement('afterend', m); });
+    $('#ff_err').innerHTML = `<div class="err-sum"><b>พบข้อผิดพลาด ${errs.length} จุด</b> — แก้ไขช่องที่มีกรอบสีแดง:<ul>${errs.map(e=>`<li><button type="button" class="linkbtn" data-goerr="${e.f}">${esc(FIELD_LABEL[e.f]||e.f)}</button>: ${esc(e.msg)}</li>`).join('')}</ul></div>`;
+    const first=$(FIELD_EL[errs[0].f]); if(first){ first.scrollIntoView({block:'center', behavior:'smooth'}); setTimeout(()=>first.focus({preventScroll:true}),300); } };
+  $('#ff_err').addEventListener('click', e=>{ const b=e.target.closest('[data-goerr]'); if(!b) return; const el=$(FIELD_EL[b.dataset.goerr]); if(el){ el.scrollIntoView({block:'center',behavior:'smooth'}); setTimeout(()=>el.focus({preventScroll:true}),300); } });
+  $('#pform').addEventListener('input', e=>{ const el=e.target.closest('.invalid'); if(el){ el.classList.remove('invalid'); el.parentElement.querySelector('.ferr')?.remove(); } });
+  $('#pform').addEventListener('change', e=>{ const el=e.target.closest('.invalid')||e.target.closest('.tam-pick'); if(el){ el.classList.remove('invalid'); el.parentElement.querySelector(':scope > .ferr')?.remove(); } });
+
   $('#ff_save').onclick = async ()=>{
     const v = id=>($('#ff_'+id)?.value||'').trim();
     const tams=[...picked].filter(id=>T[id]);
-    const rec = {sb: tams.length ? basinOfTams(tams) : d.sb, s:+v('s')||null, grp:$('#ff_grp_sel').value, title:v('title'), detail:v('detail'),
-      tambons: tams, agency:v('agency'), budget: v('budget')===''?null:+v('budget'),
-      yearStart: v('yearStart')===''?null:+v('yearStart'), yearEnd: v('yearEnd')===''?null:+v('yearEnd'), status:v('status'), note:v('note')};
-    const miss = [];
+    const bb=parseBaht(v('budget'));
+    const raw = {s:+v('s')||null, grp:$('#ff_grp_sel').value, title:v('title'), detail:v('detail'), tambons:tams, agency:v('agency'), budgetBaht:bb,
+      yearStart: v('yearStart')===''?null:+v('yearStart'), yearEnd: v('yearEnd')===''?null:+v('yearEnd'), status:v('status')};
     let pinfo = null;
-    if(mode==='new'){ pinfo=proposerInfo(); if(!pinfo.proposer) miss.push('ประเภทผู้เสนอ'); if(pinfo.proposer!==CITIZEN && !pinfo.proposerOrg) miss.push('ชื่อหน่วยงาน/องค์กร'); }
-    if(!tams.length && mode!=='edit') miss.push('ตำบล (อย่างน้อย 1 ตำบล)');
-    if(!rec.sb && mode==='edit') miss.push('ตำบล');
-    if(!rec.s) miss.push('ยุทธศาสตร์');
-    if(!rec.grp && mode!=='edit') miss.push('สภาพพื้นที่');
-    if(rec.title.length<5) miss.push('ชื่อแนวทาง/โครงการ (อย่างน้อย 5 ตัวอักษร)');
-    if(rec.yearStart && rec.yearEnd && rec.yearEnd<rec.yearStart) miss.push('ปีสิ้นสุดต้องไม่น้อยกว่าปีเริ่ม');
-    if(miss.length){ $('#ff_err').textContent = 'กรุณากรอก: '+miss.join(', '); return; }
+    if(mode==='new'){ pinfo=proposerInfo(); Object.assign(raw, pinfo); }
+    const errs = validateRec(raw, {proposer: mode==='new', allowNoTambon: mode==='edit', allowNoGrp: mode==='edit'});
+    if(mode==='edit' && !tams.length && !d.sb) errs.push({f:'tambons', msg:'กรุณาเลือกตำบลอย่างน้อย 1 ตำบล'});
+    if(errs.length){ showErr(errs); return; }
+    clearErr();
+    const rec = {sb: tams.length ? basinOfTams(tams) : d.sb, s:raw.s, grp:raw.grp, title:raw.title, detail:raw.detail, tambons:tams, agency:raw.agency,
+      budget: bb==null ? null : bb/1e6, yearStart:raw.yearStart, yearEnd:raw.yearEnd, status:raw.status, note:v('note')};
     const btn = $('#ff_save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     try{
       if(mode==='new'){ await Store.submit(Object.assign(rec, pinfo)); closeModal(); toast('ส่งโครงการแล้ว รอผู้ดูแลระบบพิจารณา'); }
@@ -1036,10 +1172,13 @@ function xlsParseRows(wb){
   const H = rows[hi].map(h=>String(h).replace(/\*/g,'').replace(/\s+/g,'').trim());
   const col = name => H.findIndex(h=>h.startsWith(name));
   const C = {title:col('ชื่อแนวทาง'), detail:col('รายละเอียด'), s:col('ยุทธศาสตร์'), grp:col('สภาพพื้นที่'), p:col('จังหวัด'), a:col('อำเภอ'), t:col('ตำบล'),
-    agency:col('หน่วยงานรับผิดชอบ'), budget:col('งบประมาณ'), ys:col('ปีเริ่ม'), ye:col('ปีสิ้นสุด'), status:col('สถานะ'), note:col('หมายเหตุ')};
-  const g = (r,k)=> C[k]>=0 ? String(r[C[k]]??'').trim() : '';
+    agency:col('หน่วยงานรับผิดชอบ'), budget:col('งบประมาณ'), budgetMillion: H[col('งบประมาณ')]?.includes('ล้าน'), ys:col('ปีเริ่ม'), ye:col('ปีสิ้นสุด'), status:col('สถานะ'), note:col('หมายเหตุ')};
+  const g = (r,k)=> (typeof C[k]==='number' && C[k]>=0) ? String(r[C[k]]??'').trim() : '';
+  const LET = i => i>=0 ? String.fromCharCode(65+i) : '';
+  xlsParseRows.cols = Object.fromEntries(Object.entries(C).filter(([k,v])=>typeof v==='number').map(([k,v])=>[k, v>=0 ? `${LET(v)} · ${rows[hi][v]||k}`.replace(/\*/g,'').trim() : k]));
+  xlsParseRows.million = !!C.budgetMillion;
   const out=[];
-  rows.slice(hi+1).forEach((r,i)=>{ const x={row:hi+2+i}; Object.keys(C).forEach(k=>x[k]=g(r,k)); if(x.title||x.s||x.grp||x.p||x.t) out.push(x); });
+  rows.slice(hi+1).forEach((r,i)=>{ const x={row:hi+2+i}; Object.keys(C).filter(k=>typeof C[k]==='number').forEach(k=>x[k]=g(r,k)); if(x.title||x.s||x.grp||x.p||x.t) out.push(x); });
   return out;
 }
 function xlsValidate(x){
@@ -1066,12 +1205,18 @@ function xlsValidate(x){
       if(bad.length) err.push(`ไม่พบตำบล ${bad.map(b=>'"'+b+'"').join(', ')} ใน อ.${a} · ตำบลใน อ.${a} ที่อยู่ในลุ่มน้ำปิง ได้แก่ ${inA.map(t=>t.t).sort((x,y)=>x.localeCompare(y,'th')).join(', ')}`);
       if(!tams.length && !bad.length) err.push('ยังไม่ได้ระบุตำบล'); }
   }
-  tams=[...new Set(tams)]; if(tams.length>120) err.push('ตำบลเกิน 120 ตำบลต่อโครงการ');
-  const num = (v,lbl,min,max)=>{ if(v==='') return null; const n=+String(v).replace(/,/g,''); if(!isFinite(n) || (min!=null&&n<min) || (max!=null&&n>max)){ err.push(`${lbl} ไม่ถูกต้อง`); return null; } return n; };
-  const budget=num(x.budget,'งบประมาณ',0), ys=num(x.ys,'ปีเริ่ม (ใช้ พ.ศ. เช่น 2570)',2560,2600), ye=num(x.ye,'ปีสิ้นสุด (ใช้ พ.ศ. เช่น 2572)',2560,2600);
-  if(ys&&ye&&ye<ys) err.push('ปีสิ้นสุดน้อยกว่าปีเริ่ม');
-  let status = LEGACY[x.status]||x.status; if(status && !STATUS_OPTS.includes(status)){ err.push(`สถานะ "${x.status}" ไม่อยู่ในตัวเลือก`); status=''; }
-  return {err, rec:{sb: basinOfTams(tams), s:s||null, grp, title:x.title, detail:x.detail, tambons:tams, agency:x.agency, budget, yearStart:ys, yearEnd:ye, status, note:x.note}};
+  tams=[...new Set(tams)];
+  let bb=parseBaht(x.budget); if(bb!=null && !Number.isNaN(bb) && xlsParseRows.million) bb=bb*1e6;
+  const yn = v => v==='' ? null : (Number.isNaN(+v) ? NaN : +v);
+  const status = x.status ? (LEGACY[x.status]||x.status) : 'เตรียมการ';
+  const raw = {s:s||null, grp, title:x.title, detail:x.detail, tambons:tams, agency:x.agency, budgetBaht:bb, yearStart:yn(x.ys), yearEnd:yn(x.ye), status};
+  // ข้อผิดพลาดจาก validateRec ที่ยังไม่ซ้ำกับที่ตรวจด้านบน (พื้นที่/ยุทธศาสตร์/สภาพพื้นที่/ชื่อ ตรวจแล้ว)
+  validateRec(raw, {allowNoTambon:true, allowNoGrp:true}).filter(e=>!['tambons','s','grp','title'].includes(e.f) || (e.f==='tambons' && tams.length>120)).forEach(e=>err.push(`@@${e.f}@@${e.msg}`));
+  // ระบุคอลัมน์ที่ต้องแก้
+  const COLMAP = xlsParseRows.cols||{};
+  const FK={budget:'budget',yearStart:'ys',yearEnd:'ye',status:'status',detail:'detail',agency:'agency',tambons:'t'};
+  const tag = m => { const mm=/^@@(\w+)@@/.exec(m); if(mm){ const k=FK[mm[1]], t=m.slice(mm[0].length); return COLMAP[k] ? `[คอลัมน์ ${COLMAP[k]}] ${t}` : `${FIELD_LABEL[mm[1]]}: ${t}`; } const k = /^ชื่อ|ชื่อโครงการ/.test(m)?'title':/ยุทธศาสตร์/.test(m)&&!/สภาพพื้นที่/.test(m)?'s':/สภาพพื้นที่/.test(m)?'grp':/จังหวัด/.test(m)?'p':/อำเภอ/.test(m)&&!/ตำบล/.test(m)?'a':/ตำบล/.test(m)?'t':/งบประมาณ/.test(m)?'budget':/^ปีสิ้นสุด/.test(m)?'ye':/^ปีเริ่ม/.test(m)?'ys':/สถานะ/.test(m)?'status':/รายละเอียด/.test(m)?'detail':/หน่วยงาน/.test(m)?'agency':''; return k&&COLMAP[k] ? `[คอลัมน์ ${COLMAP[k]}] ${m}` : m; };
+  return {err: err.map(tag), rec:{sb: basinOfTams(tams), s:s||null, grp, title:x.title, detail:x.detail, tambons:tams, agency:x.agency, budget: (bb==null||Number.isNaN(bb))?null:bb/1e6, yearStart:raw.yearStart||null, yearEnd:raw.yearEnd||null, status, note:x.note}};
 }
 function xlsBind(proposerInfo){
   let ok=[];
@@ -1143,7 +1288,7 @@ function exportXlsx(list, name){
     'จังหวัด':L.prov.join(', '),'อำเภอ':L.amp.join(', '),'ตำบล':L.tam.join(', ')||'ไม่มีตำบลเป้าหมาย (ระดับลุ่มน้ำ)',
     'ตำบลเป้าหมาย (เต็ม)':L.ts.map(tamName).join(', '),
     'กลุ่มพื้นที่':G.codes.join(', '),'คำอธิบายกลุ่มพื้นที่':G.codes.map(c=>`${c} ${M.groups[c]||''}`).join('; '),'ที่มากลุ่มพื้นที่':G.codes.length?(p.grp?'ผู้เสนอระบุ':G.fromMeasure?'ตามมาตรการ':'ตามตำบลเป้าหมาย'):'',
-    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (ล้านบาท)':p.budget,'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':stageOf(p),'หมายเหตุ':p.note,
+    'หน่วยงานรับผิดชอบ':p.agency,'งบประมาณ (บาท)':toBaht(p.budget),'ปีเริ่ม (พ.ศ.)':p.yearStart,'ปีสิ้นสุด (พ.ศ.)':p.yearEnd,'สถานะ':stageOf(p),'หมายเหตุ':p.note,
     }; });
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [8,22,30,40,30,60,50,22,16,20,30,50,18,40,16,22,14,10,10,16,24].map(w=>({wch:w}));
@@ -1167,7 +1312,7 @@ function bind(){
     const pr = e.target.closest('[data-pid]:not([data-act])'); if(pr){ openProject(pr.dataset.pid); return; }
     const a = e.target.closest('[data-act]'); if(!a) return;
     const act = a.dataset.act, v = a.dataset.v;
-    const sub = ()=>SUBS.find(s=>s._id===a.dataset.sid);
+    const sub = ()=>SUBS.find(s=>s._id===a.dataset.sid) || REJ.find(s=>s._id===a.dataset.sid);
     switch(act){
       case 'close': closeModal(); break;
       case 'goprov': S.prov=v||null; S.amp=null; S.tam=null; renderFilters(); renderView(); break;
@@ -1215,9 +1360,20 @@ function bind(){
       case 'forgot': { const em=$('#lg_email').value.trim(); if(!em){ $('#lg_err').textContent='กรอกอีเมลก่อน'; break; } try{ await Store.resetPassword(em); $('#lg_err').textContent='ส่งลิงก์ไปที่อีเมลแล้ว'; }catch(err){ $('#lg_err').textContent=err.message; } break; }
       case 'approve': { const s=sub(); a.disabled=true; try{ const id=await Store.approve(s, s); toast(`อนุมัติแล้ว บันทึกเป็นโครงการ ${id}`); }catch(err){ a.disabled=false; toast('อนุมัติไม่สำเร็จ: '+err.message); } break; }
       case 'review': { const s=sub(); openForm('review', s, s); break; }
-      case 'reject': a.closest('.sub-card').querySelector('.rej').hidden=false; break;
-      case 'rejectno': a.closest('.rej').hidden=true; break;
-      case 'rejectok': { const s=sub(); try{ await Store.reject(s, $('#rr_'+CSS.escape(s._id)).value.trim()); toast('บันทึกว่าไม่อนุมัติแล้ว'); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
+      case 'reject': openRejectModal([sub()]); break;
+      case 'subtab': S.adminTab=v; S.sel.clear(); renderView(); break;
+      case 'selsub': { a.checked?S.sel.add(a.dataset.sid):S.sel.delete(a.dataset.sid); renderView(); break; }
+      case 'selall': { const list=S.adminTab==='rejected'?REJ:SUBS; if(a.checked) list.forEach(x=>S.sel.add(x._id)); else S.sel.clear(); renderView(); break; }
+      case 'rejectsel': { const list=SUBS.filter(x=>S.sel.has(x._id)); if(list.length) openRejectModal(list); break; }
+      case 'approvesel': { const list=SUBS.filter(x=>S.sel.has(x._id)); const ok=list.filter(x=>!subErrs(x).length), bad=list.length-ok.length;
+        if(!ok.length){ toast('รายการที่เลือกมีข้อมูลต้องแก้ไขทั้งหมด กด “ตรวจ/แก้ไข” ก่อน'); break; }
+        a.disabled=true; a.textContent='กำลังอนุมัติ…';
+        try{ const ids=await Store.approveMany(ok); ok.forEach(x=>S.sel.delete(x._id)); toast(`อนุมัติแล้ว ${ids.length} โครงการ (${ids[0]}${ids.length>1?'–'+ids[ids.length-1]:''})${bad?` · ข้าม ${bad} รายการที่ต้องแก้ไข`:''}`); renderView(); }
+        catch(err){ toast('อนุมัติไม่สำเร็จ: '+err.message); renderView(); } break; }
+      case 'restore': { const s=sub(); try{ await Store.restoreMany([s]); S.sel.delete(s._id); toast('นำกลับไปกล่องรอพิจารณาแล้ว'); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
+      case 'restoresel': { const list=REJ.filter(x=>S.sel.has(x._id)); try{ await Store.restoreMany(list); list.forEach(x=>S.sel.delete(x._id)); toast(`นำกลับไปพิจารณา ${list.length} โครงการแล้ว`); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
+      case 'viewsub': { const s=sub(); openForm('review', s, s); break; }
+      case 'subxls': subXlsx(); break;
       case 'seed': { a.disabled=true; try{ await Store.seed((n,t)=>{ const el=$('#seedProg'); if(el) el.textContent=`นำเข้าแล้ว ${n}/${t}`; }); toast('นำเข้าข้อมูลตั้งต้นแล้ว'); }catch(err){ a.disabled=false; toast('นำเข้าไม่สำเร็จ: '+err.message); } break; }
       case 'export': exportXlsx(); break;
       case 'syncseed': { a.disabled=true; try{ const r=await Store.syncSeed((n,t)=>{ const el=$('#syncProg'); if(el) el.textContent=`อัปเดตแล้ว ${n}/${t}`; }); toast(`อัปเดตตาม Excel ฉบับใหม่แล้ว ${fmt(r.n)} โครงการ`); renderView(); }catch(err){ a.disabled=false; toast('อัปเดตไม่สำเร็จ: '+err.message); } break; }
