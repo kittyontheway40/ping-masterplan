@@ -1280,13 +1280,17 @@ function showSubmitted(code, n, again){
   <div class="modal-b">
     <div class="code-card"><div class="cc-l">เลขติดตามโครงการของคุณ</div><div class="cc-code" id="cc_code">${esc(code)}</div>
       <div class="cc-acts"><button class="btn sm primary" data-copy="${esc(code)}">คัดลอกเลข</button><button class="btn sm" data-copy="${esc(trackLink(code))}">คัดลอกลิงก์ตรวจสอบสถานะ</button></div></div>
-    <div class="tip-box"><b>เก็บเลขนี้ไว้</b> (จดไว้ แคปหน้าจอ หรือคัดลอกลิงก์) ใช้ตรวจสอบผลการพิจารณาได้ที่ปุ่ม <b>“ตรวจสอบสถานะ”</b> มุมขวาบนของเว็บ${n>1?` · เลขเดียวใช้ดูผลได้ทั้ง ${fmt(n)} โครงการในชุดนี้`:''}</div>
-    <ul class="steps-ul"><li>⏳ <b>รอพิจารณา</b> — ผู้ดูแลกำลังตรวจสอบ</li><li>✅ <b>อนุมัติ</b> — ได้รับรหัสโครงการและแสดงในระบบ</li><li>✎ <b>ส่งกลับให้แก้ไข</b> — แก้ไขและส่งใหม่ได้ภายใน ${TRACK_DAYS} วัน ไม่เช่นนั้นจะปิดเรื่องอัตโนมัติ</li><li>✕ <b>ไม่ผ่านอนุมัติ</b> — ดูเหตุผล และปรับปรุงเพื่อเสนอใหม่ได้</li></ul>
+    <div class="tip-box"><b>เก็บเลขนี้ไว้</b> โดยจด แคปหน้าจอ หรือคัดลอกลิงก์ แล้วใช้ปุ่ม <b>“ตรวจสอบสถานะ”</b> มุมขวาบนของเว็บเพื่อดูผลการพิจารณา${n>1?` · เลขนี้ใช้ดูผลได้ทั้ง ${fmt(n)} โครงการในชุดนี้`:''}</div>
+    <div class="st-guide"><div class="sg-h">ผลการพิจารณาที่จะได้รับ</div>
+      <div class="sg-r"><span class="stp st-wait">รอพิจารณา</span><span>ผู้ดูแลระบบกำลังตรวจสอบโครงการ</span></div>
+      <div class="sg-r"><span class="stp st-ok">อนุมัติ</span><span>โครงการได้รับรหัสและแสดงในระบบให้ทุกคนเห็น</span></div>
+      <div class="sg-r"><span class="stp st-fix">ส่งกลับให้แก้ไข</span><span>ผู้ดูแลขอให้ปรับข้อมูลบางส่วน เปิดหน้าตรวจสอบสถานะเพื่อดูว่าต้องแก้อะไร แล้วกด “แก้ไขและส่งใหม่” <b>ภายใน ${TRACK_DAYS} วัน</b> หากเกินกำหนดระบบจะปิดเรื่องอัตโนมัติ</span></div>
+      <div class="sg-r"><span class="stp st-no">ไม่ผ่านอนุมัติ</span><span>ดูเหตุผลได้ในหน้าตรวจสอบสถานะ และปรับปรุงเพื่อเสนอใหม่ได้</span></div></div>
     <p class="note">${contactLine()}</p>
   </div>
   <div class="modal-f"><button class="btn" data-act="close">ปิด</button><button class="btn primary" data-act="track" data-v="${esc(code)}">ดูสถานะตอนนี้</button></div>`);
 }
-const TRACK_ST = {pending:['⏳','รอพิจารณา','st-wait'], approved:['✅','อนุมัติแล้ว','st-ok'], revise:['✎','ส่งกลับให้แก้ไข','st-fix'], rejected:['✕','ไม่ผ่านอนุมัติ','st-no'], closed:['⛔','ปิดเรื่องแล้ว','st-closed']};
+const TRACK_ST = {pending:['','รอพิจารณา','st-wait'], approved:['','อนุมัติแล้ว','st-ok'], revise:['','ส่งกลับให้แก้ไข','st-fix'], rejected:['','ไม่ผ่านอนุมัติ','st-no'], closed:['','ปิดเรื่องแล้ว','st-closed']};
 function openTrack(code){
   modal(`<div class="modal-h"><div><h2>ตรวจสอบสถานะโครงการ</h2><div class="note">กรอกเลขติดตามที่ได้รับหลังส่งโครงการ</div></div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
   <div class="modal-b">
@@ -1301,13 +1305,21 @@ function openTrack(code){
       TRACK_CUR=t; box.innerHTML=trackHtml(t); try{ history.replaceState(null,'','#track='+c); }catch(e){} }
     catch(e){ box.innerHTML=`<div class="err">ตรวจสอบไม่สำเร็จ: ${esc(e.message||e)}</div>`; } };
   $('#tk_form').onsubmit = e=>{ e.preventDefault(); run(); };
+  let prevBody = '';
+  $('#tk_code').addEventListener('input', e=>{ const el=e.target;
+    let raw = el.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(raw.length<=4 && 'PING'.startsWith(raw) && !/^PING-./.test(el.value.toUpperCase())){ el.value=raw; prevBody=''; return; }   // กำลังพิมพ์คำนำหน้า PING
+    let body = raw.replace(/^PING/,'').slice(0,8);
+    if(e.inputType==='deleteContentBackward' && body===prevBody) body=body.slice(0,-1);   // ลบขีดแล้ว ให้ลบตัวอักษรก่อนหน้าด้วย
+    prevBody = body;
+    el.value = body ? 'PING-'+body.slice(0,4)+(body.length>4?'-'+body.slice(4):'') : (raw.startsWith('PING')?'PING-':''); });
   if(code) run(); else $('#tk_code').focus();
 }
 let TRACK_CUR=null;
 function trackHtml(t){
   const st = x => (x.review==='revise' && tsOf(x.deadline) && tsOf(x.deadline)<Date.now()) ? 'closed' : (TRACK_ST[x.review] ? x.review : 'pending');
   const cnt={}; t.items.forEach(x=>cnt[st(x)]=(cnt[st(x)]||0)+1);
-  const sum = t.items.length>1 ? `<div class="tk-sum">${Object.entries(cnt).map(([k,n])=>`<span class="stp ${TRACK_ST[k][2]}">${TRACK_ST[k][0]} ${TRACK_ST[k][1]} ${n}</span>`).join('')}</div>` : '';
+  const sum = t.items.length>1 ? `<div class="tk-sum">${Object.entries(cnt).map(([k,n])=>`<span class="stp ${TRACK_ST[k][2]}">${TRACK_ST[k][1]} ${n}</span>`).join('')}</div>` : '';
   return sum + t.items.map(x=>{ const k=st(x), [ic,lbl,cls]=TRACK_ST[k], L=subLoc(x);
     let body='';
     if(k==='pending') body='<div class="note">ผู้ดูแลระบบกำลังตรวจสอบ</div>';
@@ -1315,7 +1327,7 @@ function trackHtml(t){
     if(k==='revise') body=`<div class="tk-reason"><b>สิ่งที่ต้องแก้ไข:</b> ${esc(x.reason||'-')}</div><div class="note">แก้ไขได้ถึง ${new Date(tsOf(x.deadline)).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})} (เหลือ ${daysLeft(x.deadline)} วัน) — ถ้าไม่แก้ไขภายในกำหนดจะปิดเรื่องอัตโนมัติ</div><button class="btn sm pink" data-act="tkresub" data-v="${esc(x.k)}">แก้ไขและส่งใหม่</button>`;
     if(k==='rejected') body=`<div class="tk-reason"><b>เหตุผล:</b> ${esc(x.reason||'ไม่ได้ระบุ')}</div><button class="btn sm" data-act="tkresub" data-v="${esc(x.k)}">ปรับปรุงและเสนอใหม่</button>`;
     if(k==='closed') body=`<div class="tk-reason">${esc(x.reason && x.review==='closed' ? x.reason : `ไม่ได้แก้ไขภายใน ${TRACK_DAYS} วัน จึงปิดเรื่องอัตโนมัติ`)}</div><button class="btn sm" data-act="tknew" data-v="${esc(x.k)}">เสนอเป็นโครงการใหม่</button>`;
-    return `<div class="tk-item ${cls}"><div class="tk-h"><span class="stp ${cls}">${ic} ${lbl}</span><b>${esc(x.title||'')}</b></div>
+    return `<div class="tk-item ${cls}"><div class="tk-h"><span class="stp ${cls}">${lbl}</span><b>${esc(x.title||'')}</b></div>
       <div class="note">${x.s?`ยุทธศาสตร์ที่ ${x.s} · `:''}${x.grp?`${esc(x.grp)} ${esc(M.groups[x.grp]||'')} · `:''}${esc(L.t.length?('ต.'+L.t.slice(0,4).join(', ต.')+(L.t.length>4?` +${L.t.length-4}`:'')+' อ.'+L.a.join(', ')):'')}</div>${body}</div>`; }).join('');
 }
 /* ---------- นำเข้าโครงการจาก Excel ---------- */
