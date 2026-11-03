@@ -266,6 +266,19 @@ const Store = {
       await b.commit(); }
     await this.trackUpdate(list.map(x=>[x,{review:'pending', reason:'', deadline:null}]));
   },
+  /* ลบคำเสนอออกจากระบบถาวร (ใช้กับถังไม่ผ่านอนุมัติ เช่น รายการทดสอบ) */
+  async purgeMany(list){
+    const why = {review:'closed', reason:'ผู้ดูแลลบคำเสนอนี้ออกจากระบบแล้ว'};
+    if(this.mode==='demo'){
+      const ids=new Set(list.map(x=>x._id)); LS.set('ping_subs', LS.get('ping_subs', []).filter(s=>!ids.has(s._id)));
+      list.forEach(x=>this.demoAudit('ลบคำเสนอถาวร', x._id, x.title)); await this.trackUpdate(list.map(x=>[x,why])); this.initDemo(); return;
+    }
+    await this.trackUpdate(list.map(x=>[x,why]));
+    for(let i=0;i<list.length;i+=200){ const b=this.db.batch();
+      list.slice(i,i+200).forEach(x=>{ b.delete(this.db.doc('submissions/'+x._id));
+        b.set(this.db.collection('audit').doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(), by:S.user.email, action:'ลบคำเสนอถาวร', id:x._id, detail:x.title}); });
+      await b.commit(); }
+  },
   async approveMany(list){
     await this.ensureSeeded();
     let {seq} = this.nextId(); const ids=[];
@@ -947,7 +960,7 @@ function adminInbox(){
   const selBad = tab==='pending' ? SUBS.filter(x=>S.sel.has(x._id) && subErrs(x).length).length : 0;
   const tools = `<span class="isel">${nSel?`เลือกแล้ว <b>${nSel}</b> รายการ`:'ติ๊กเลือกรายการในตาราง แล้วกดปุ่มจัดการ'}</span>` + (tab==='pending'
     ? `<button class="btn sm primary" data-act="approvesel" ${nSel&&nSel>selBad?'':'disabled'}>✓ อนุมัติ${nSel?` (${nSel-selBad})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'} title="เลือก 1 รายการเพื่อตรวจ/แก้ไข">✎ ตรวจ/แก้ไข</button><button class="btn sm warn" data-act="revisesel" ${nSel?'':'disabled'}>↩ ส่งกลับให้แก้ไข${nSel?` (${nSel})`:''}</button><button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>${selBad?`<span class="vbad sub">${selBad} รายการที่เลือกมีข้อมูลต้องแก้ไข จะยังไม่ถูกอนุมัติ</span>`:''}`
-    : `<button class="btn sm primary" data-act="restoresel" ${nSel?'':'disabled'}>↩ นำกลับไปพิจารณา${nSel?` (${nSel})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'}>ดูรายละเอียด</button>${tab==='revise'?`<button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>`:''}`);
+    : `<button class="btn sm primary" data-act="restoresel" ${nSel?'':'disabled'}>↩ นำกลับไปพิจารณา${nSel?` (${nSel})`:''}</button><button class="btn sm" data-act="reviewsel" ${nSel===1?'':'disabled'}>ดูรายละเอียด</button>${tab==='revise'?`<button class="btn sm danger" data-act="rejectsel" ${nSel?'':'disabled'}>✕ ไม่อนุมัติ${nSel?` (${nSel})`:''}</button>`:''}${tab==='rejected'?`<button class="btn sm danger" data-act="purgesel" ${nSel?'':'disabled'} title="ลบออกจากระบบถาวร กู้คืนไม่ได้">🗑 ลบถาวร${nSel?` (${nSel})`:''}</button>`:''}`);
   return `<div class="sec-h" style="margin-top:0"><h2>คัดกรองโครงการที่เสนอเข้ามา</h2><span class="note">โครงการจะแสดงให้ทุกคนเห็นเมื่อผู้ดูแลอนุมัติแล้วเท่านั้น</span></div>
   <div class="itabs" role="tablist"><button class="itab" role="tab" data-act="subtab" data-v="pending" aria-selected="${tab==='pending'}">กล่องรอพิจารณา <b>${SUBS.length}</b></button><button class="itab fix" role="tab" data-act="subtab" data-v="revise" aria-selected="${tab==='revise'}">ส่งกลับให้แก้ไข <b>${REV.length}</b></button><button class="itab rej" role="tab" data-act="subtab" data-v="rejected" aria-selected="${tab==='rejected'}">ถังโครงการที่ไม่ผ่านอนุมัติ <b>${REJ.length}</b></button></div>
   <div class="ibox">
@@ -1619,6 +1632,9 @@ function bind(){
         try{ const ids=await Store.approveMany(ok); ok.forEach(x=>S.sel.delete(x._id)); toast(`อนุมัติแล้ว ${ids.length} โครงการ (${ids[0]}${ids.length>1?'–'+ids[ids.length-1]:''})${bad?` · ข้าม ${bad} รายการที่ต้องแก้ไข`:''}`); renderView(); }
         catch(err){ toast('อนุมัติไม่สำเร็จ: '+err.message); renderView(); } break; }
       case 'restore': { const s=sub(); try{ await Store.restoreMany([s]); S.sel.delete(s._id); toast('นำกลับไปกล่องรอพิจารณาแล้ว'); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
+      case 'purgesel': { const list=curList().filter(x=>S.sel.has(x._id)); if(!list.length) break;
+        if(!confirm(`ลบคำเสนอ ${list.length} รายการออกจากระบบถาวร?\nกู้คืนไม่ได้ (ใช้สำหรับรายการทดสอบหรือข้อมูลซ้ำ)`)) break;
+        try{ await Store.purgeMany(list); list.forEach(x=>S.sel.delete(x._id)); toast(`ลบถาวร ${list.length} รายการแล้ว`); renderView(); }catch(err){ toast('ลบไม่สำเร็จ: '+err.message); } break; }
       case 'restoresel': { const list=curList().filter(x=>S.sel.has(x._id)); try{ await Store.restoreMany(list); list.forEach(x=>S.sel.delete(x._id)); toast(`นำกลับไปพิจารณา ${list.length} โครงการแล้ว`); renderView(); }catch(err){ toast('ไม่สำเร็จ: '+err.message); } break; }
       case 'viewsub': { const s=sub(); openForm('review', s, s); break; }
       case 'subxls': subXlsx(); break;
