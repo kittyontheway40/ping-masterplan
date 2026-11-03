@@ -1105,6 +1105,9 @@ function validateRec(r, o={}){
   return E;
 }
 const subToVal = x => Object.assign({}, x, {budgetBaht: toBaht(x.budget)});
+/* ---------- คู่มือการเสนอโครงการ (PDF) ---------- */
+const MANUAL_URL = 'assets/manual_proposal.pdf';
+const MANUAL_BTN = `<a class="manual-btn" href="${MANUAL_URL}?v=1" target="_blank" rel="noopener" download="คู่มือการเสนอโครงการ_ลุ่มน้ำปิง.pdf" title="เปิด/ดาวน์โหลดคู่มือ (PDF 7 หน้า)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg><span><b class="mb-l">คู่มือการเสนอโครงการ</b><b class="mb-s">คู่มือ</b><small>PDF · 7 หน้า</small></span></a>`;
 /* ---------- ฟอร์มเสนอ/แก้ไขโครงการ ---------- */
 const PROPOSER_TYPES = ['หน่วยงานภาครัฐ','องค์กรปกครองส่วนท้องถิ่น','ภาคเอกชน/สถาบันการศึกษา','ชุมชน/กลุ่มองค์กร','ประชาชนทั่วไป'];
 const CITIZEN = 'ประชาชนทั่วไป';
@@ -1130,7 +1133,7 @@ function openForm(mode, data={}, sub=null, rs=null){
       <div class="fld full"><label for="ff_proposerContact">อีเมลหรือโทรศัพท์สำหรับติดต่อกลับ</label><input id="ff_proposerContact" placeholder="ไม่บังคับ"></div></div>`
     : mode==='review' ? `<div class="formsec">ผู้เสนอ</div><div class="note-box">${propLine(d)||'-'}${d.proposerContact?' · ติดต่อ '+esc(d.proposerContact):''}</div>` : '';
   const provs = [...new Set(pingTams().map(t=>t.p))].sort((a,b)=>a.localeCompare(b,'th'));
-  modal(`<div class="modal-h"><div><h2>${title}</h2>${isNew?`<div class="note">${mode==='resubmit'?`เลขติดตามเดิม ${esc(rs?.code||'')} · `:''}ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>`:''}</div><button class="x" data-act="close" aria-label="ปิด">×</button></div>
+  modal(`<div class="modal-h"><div><h2>${title}</h2>${isNew?`<div class="note">${mode==='resubmit'?`เลขติดตามเดิม ${esc(rs?.code||'')} · `:''}ผู้ดูแลระบบจะตรวจสอบก่อนแสดงในระบบ</div>`:''}</div>${isNew?MANUAL_BTN:''}<button class="x" data-act="close" aria-label="ปิด">×</button></div>
   <div class="modal-b">
   ${proposerSec}
   ${mode==='new'?`<div class="formsec">วิธีเสนอ <span class="note">(กดเลือก 1 แบบ)</span></div><div class="mpick" role="radiogroup" aria-label="วิธีเสนอ">
@@ -1335,7 +1338,7 @@ const XLS_MAX = 300;
 function xlsPanel(){
   return `<div class="xsteps">
     <div class="xstep"><div class="xn">1</div><div><b>ดาวน์โหลดแบบฟอร์ม Excel</b><div class="note">มี 3 ชีต: กรอกข้อมูล · ตัวอย่าง · คำอธิบายสภาพพื้นที่ (ตัวเลือกส่วนใหญ่เป็นดรอปดาวน์)</div>
-      <a class="btn sm primary" href="assets/template_proposal.xlsx?v=${encodeURIComponent(CFG.version||'')}" download="แบบฟอร์มเสนอโครงการ_ลุ่มน้ำปิง.xlsx">ดาวน์โหลดแบบฟอร์ม (.xlsx)</a></div></div>
+      <a class="btn sm primary" href="assets/template_proposal.xlsx?v=${encodeURIComponent(CFG.version||'')}" download="แบบฟอร์มเสนอโครงการ_ลุ่มน้ำปิง.xlsx">ดาวน์โหลดแบบฟอร์ม (.xlsx)</a> <a class="btn sm" href="${MANUAL_URL}?v=1" target="_blank" rel="noopener" download="คู่มือการเสนอโครงการ_ลุ่มน้ำปิง.pdf">ดาวน์โหลดคู่มือ (PDF)</a></div></div>
     <div class="xstep"><div class="xn">2</div><div><b>กรอกข้อมูลในชีต "กรอกข้อมูล"</b><div class="note">1 แถว = 1 โครงการ · ช่องที่มี * ต้องกรอก · ตำบลหลายตำบลคั่นด้วยเครื่องหมายจุลภาค ( , ) หรือพิมพ์ "ทั้งอำเภอ" · ส่งได้ครั้งละไม่เกิน ${XLS_MAX} โครงการ</div></div></div>
     <div class="xstep"><div class="xn">3</div><div><b>อัปโหลดไฟล์ที่กรอกแล้ว</b><div class="note">ระบบจะตรวจทุกแถวและแสดงผลก่อนส่ง</div>
       <label class="upl"><input type="file" id="xl_file" accept=".xlsx,.xls"><span>เลือกไฟล์ Excel</span></label> <span class="note" id="xl_name"></span></div></div>
