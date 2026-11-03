@@ -505,7 +505,7 @@ function renderFilters(){
       <div class="fld"><label for="fBt">ตำบล</label><select id="fBt" ${S.bamp?'':'disabled'}><option value="">${S.bamp?'ทุกตำบล':'เลือกอำเภอก่อน'}</option>${tams.map(t=>`<option value="${t.id}" ${S.btam===t.id?'selected':''}>${esc(t.t)}${t.target?' (เป้าหมาย)':''}</option>`).join('')}</select></div></div>`;
   }
   if(S.tab==='area' || S.tab==='basin') loc = loc.replace(/<\/div>\s*$/, tracker()+'</div>');
-  else if(S.tab==='map') loc = `<div class="locrow trk-only">${tracker()}</div>`;
+  else if(S.tab==='map' || S.tab==='all') loc = `<div class="locrow trk-only">${tracker()}</div>`;
   $('#filters').innerHTML = loc + `
     <div class="fld search"><label for="fq">ค้นหา</label><input id="fq" type="search" placeholder="ชื่อโครงการ ตำบล อำเภอ ลุ่มน้ำ หรือรหัส" value="${esc(f.q)}"></div>
     <div class="fld"><span class="lbl">ยุทธศาสตร์</span><div class="chips"><button class="chip all" data-act="fsall" aria-pressed="${!f.s.size}">ทั้งหมด</button>${M.strategies.map(s=>`<button class="chip" data-act="fs" data-n="${s.n}" aria-pressed="${f.s.has(s.n)}" title="${esc(s.short)}"><i style="background:${SCOL[s.n]}"></i>${s.n} ${esc(shortS(s.n))}</button>`).join('')}</div></div>
@@ -554,6 +554,28 @@ function tracker(){
   return `<div class="tracker"><div class="trk-h"><span class="lbl">ติดตามสถานะโครงการ ${tip('นับตามพื้นที่และตัวกรองที่เลือก · กดที่สถานะเพื่อกรองเฉพาะสถานะนั้น · ผู้ดูแลปรับสถานะได้ที่ปุ่ม "แก้ไขข้อมูล" ในรายละเอียดโครงการ')}</span>${S.f.stage?'<button type="button" class="linkbtn" data-act="stage" data-v="">ดูทุกสถานะ</button>':''}</div><div class="trk-bar">${bar}</div><div class="trk-items">${items}</div></div>`;
 }
 function shortS(n){ return ({1:'อุปโภคบริโภค',2:'ภาคการผลิต',3:'ท่วม–แล้ง',4:'ระบบนิเวศ',5:'บริหารจัดการ'})[n]; }
+
+/* ================= VIEW: ALL (โครงการทั้งหมด / ลิงก์ตรงรายยุทธศาสตร์) ================= */
+function renderAll(){
+  const el = $('#view'); const fl = filt(P); const f = S.f;
+  const one = f.s.size===1 ? [...f.s][0] : null;
+  let head;
+  if(one){
+    const st = STRAT[one]; const progs = M.programmes.filter(p=>p.s===one);
+    head = `<div class="info all-head" style="--sc:${SCOL[one]}"><div class="ah-top"><span class="ah-n">ยุทธศาสตร์ที่ ${one}</span><button class="btn sm" data-act="copylink">คัดลอกลิงก์หน้านี้</button></div>
+      <h2>${esc(st.name)}</h2>${st.obj?`<p class="note">${esc(st.obj)}</p>`:''}
+      <div class="ah-f">${progs.map(p=>`<span class="pill code">${p.code}</span> ${esc(p.name)}`).join('<br>')}</div>
+      <div class="sumgrid" style="margin-top:10px"><div class="stat"><div class="v" style="color:var(--pink)">${fmt(fl.length)}</div><div class="l">แผนงาน/โครงการ${filterActive()&&!(f.s.size===1&&!f.q&&!f.F&&!f.S&&!f.grp&&!f.stage)?' (ตามตัวกรอง)':''}</div></div>
+      <div class="stat"><div class="v">${fmt(progs.length)}</div><div class="l">แผนงานหลัก (Flagship)</div></div>
+      <div class="stat"><div class="v">${fmt(M.measures.filter(m=>m.s===one).length)}</div><div class="l">มาตรการ</div></div></div></div>`;
+  } else {
+    head = `<div class="info all-head"><div class="ah-top"><h2 style="margin:0">แผนงาน/โครงการทั้งหมด${f.s.size?` · ยุทธศาสตร์ที่ ${[...f.s].sort().join(', ')}`:''}</h2><button class="btn sm" data-act="copylink">คัดลอกลิงก์หน้านี้</button></div>
+      <div class="lbl" style="margin-top:10px">สัดส่วนโครงการรายยุทธศาสตร์</div>${stratBar(fl)}
+      <div class="ah-links"><span class="lbl">ลิงก์ตรงรายยุทธศาสตร์</span>${[1,2,3,4,5].map(n=>`<a class="chip" href="#all?s=${n}"><i style="background:${SCOL[n]}"></i>${n} ${esc(shortS(n))}</a>`).join('')}</div></div>`;
+  }
+  el.innerHTML = head + `<div class="sec-h"><h3>รายการแผนงาน/โครงการ (${fmt(fl.length)}) ${tip('รวมทั้งโครงการที่ระบุตำบลเป้าหมาย และแนวทางระดับลุ่มน้ำสาขาที่ไม่ระบุตำบล')}</h3></div>`
+    + projTable('all', fl, {name: one ? `ยุทธศาสตร์ที่${one}` : 'ทั้งหมด', empty:'ไม่พบโครงการตามตัวกรอง'});
+}
 
 /* ================= VIEW: AREA (จังหวัด-อำเภอ-ตำบล) ================= */
 function renderArea(){
@@ -1483,11 +1505,44 @@ function exportXlsx(list, name){
 }
 
 /* ================= ROUTING & EVENTS ================= */
-function setTab(t){ S.tab=t; $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===t)); try{ history.replaceState(null,'','#'+t); }catch(e){} renderFilters(); renderView(); }
+function setTab(t){ S.tab=t; $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===t)); renderFilters(); renderView(); }
+/* ลิงก์ตรง: #all?s=1  ·  #all?s=1,2&F=F3&grp=W2&q=ฝาย  ·  ย่อ #s=1 */
+const TABS = ['all','area','basin','map','admin'];
+function parseHash(h){
+  h = (h||'').replace(/^#/,''); if(!h || /^track=/.test(h)) return null;
+  let tab = '', qs = h;
+  const m = /^([a-z]+)(?:\?(.*))?$/.exec(h);
+  if(m && TABS.includes(m[1])){ tab = m[1]; qs = m[2]||''; }
+  const q = new URLSearchParams(qs); const f = {};
+  if(q.get('s')) f.s = q.get('s').split(',').map(Number).filter(n=>n>=1&&n<=5);
+  ['F','S','grp','q','stage'].forEach(k=>{ if(q.get(k)) f[k]=q.get(k); });
+  if(!tab) tab = Object.keys(f).length ? 'all' : '';
+  return tab ? {tab, f} : null;
+}
+function applyHash(r){
+  if(!r) return false;
+  S.tab = r.tab;
+  S.f = {q:'', s:new Set(), F:'', S:'', grp:'', src:'', stage:''};
+  if(r.f.s) S.f.s = new Set(r.f.s);
+  ['F','S','grp','q','stage'].forEach(k=>{ if(r.f[k]) S.f[k]=r.f[k]; });
+  return true;
+}
+function viewHash(){
+  const f = S.f, q = new URLSearchParams();
+  if(S.tab!=='admin'){
+    if(f.s.size) q.set('s',[...f.s].sort().join(','));
+    ['F','S','grp','q','stage'].forEach(k=>{ if(f[k]) q.set(k,f[k]); });
+  }
+  const qs = q.toString().replace(/%2C/g,',');
+  return '#'+S.tab+(qs?'?'+qs:'');
+}
+function viewLink(){ return location.origin+location.pathname+viewHash(); }
+function syncHash(){ if(/^#track=/.test(location.hash||'')) return; try{ history.replaceState(null,'',viewHash()); }catch(e){} }
 function renderView(){
   if(!M) return;
   $('#filters').hidden = S.tab==='admin';
-  if(S.tab==='area') renderArea(); else if(S.tab==='basin') renderBasin(); else if(S.tab==='map') renderMap(); else renderAdmin();
+  if(S.tab==='all') renderAll(); else if(S.tab==='area') renderArea(); else if(S.tab==='basin') renderBasin(); else if(S.tab==='map') renderMap(); else renderAdmin();
+  syncHash();
 }
 function onData(){ buildIndex(); renderKPIs(); renderFilters(); renderHeader(); renderView(); }
 function bind(){
@@ -1527,6 +1582,7 @@ function bind(){
       case 'stage': S.f.stage = (S.f.stage===v ? '' : v); renderFilters(); renderView(); break;
       case 'morefilt': S.moreOpen=!S.moreOpen; renderFilters(); break;
       case 'fsall': S.f.s.clear(); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break;
+      case 'copylink': { const u=viewLink(); try{ await navigator.clipboard.writeText(u); toast('คัดลอกลิงก์แล้ว'); }catch(err){ prompt('คัดลอกลิงก์นี้', u); } break; }
       case 'more': { TABLES[a.dataset.key].n += PAGE*2; a.closest('[data-table]').innerHTML = tableInner(a.dataset.key); break; }
       case 'fs': { const n=+a.dataset.n; S.f.s.has(n)?S.f.s.delete(n):S.f.s.add(n); S.f.F=''; S.f.S=''; renderFilters(); renderView(); break; }
       case 'clear': S.f={q:'',s:new Set(),F:'',S:'',grp:'',src:'',stage:''}; renderFilters(); renderView(); break;
@@ -1578,6 +1634,7 @@ function bind(){
   document.addEventListener('toggle', e=>{ if(e.target.classList && e.target.classList.contains('statsbox')) S.statsOpen = e.target.open; }, true);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#modalBg')?.dataset.locked) closeModal(); });
   $$('.tab').forEach(b=>b.onclick = ()=>setTab(b.dataset.tab));
+  window.addEventListener('hashchange', ()=>{ const r=parseHash(location.hash); if(r && viewHash()!==location.hash){ applyHash(r); $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===S.tab)); renderFilters(); renderView(); window.scrollTo({top:0}); } });
   $('#newBtn').onclick = ()=>openForm('new');
   $('#trackBtn').onclick = ()=>openTrack('');
   $('#authBtn').dataset.act = 'auth';
@@ -1609,12 +1666,13 @@ async function boot(){
     GROUP_DESC = Object.fromEntries(Object.entries(M.groupInfo||{}).map(([k,v])=>[k,v.cond]));
     M.measures.forEach(x=>MEAS[x.code]=x); M.programmes.forEach(x=>PROG[x.code]=x); M.strategies.forEach(x=>STRAT[x.n]=x); M.basins.forEach(x=>BAS[x.name]=x);
   }catch(e){ $('#view').innerHTML = `<div class="empty">โหลดข้อมูลไม่สำเร็จ (${esc(e.message)}) ตรวจว่าโฟลเดอร์ data อยู่ข้างไฟล์ index.html</div>`; return; }
-  const h = (location.hash||'').slice(1); if(['area','basin','map','admin'].includes(h)) S.tab=h;
+  const deep = applyHash(parseHash(location.hash));
   $$('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===S.tab));
   await Store.init();
   const ss = Sess.get();
   const tk = /^#track=(.+)$/.exec(location.hash||'');
   if(tk){ if(!ss) Sess.set({role:'user'}, false); renderHeader(); openTrack(decodeURIComponent(tk[1])); }
+  else if(!ss && deep && S.tab!=='admin'){ Sess.set({role:'user'}, false); renderHeader(); }
   else if(!ss) openWelcome();
   else if(ss.role==='admin' && Store.mode==='firebase'){ setTimeout(()=>{ if(!S.admin && !Store.auth.currentUser){ Sess.clear(); openWelcome('admin'); } }, 2500); }
 }

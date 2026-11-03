@@ -558,3 +558,13 @@ td.grp{min-width:130px}
 @media (max-width:560px){.manual-btn span small{display:none}.manual-btn{padding:6px 9px}}
 .manual-btn b{font-weight:700;color:inherit}.manual-btn .mb-s{display:none}
 @media (max-width:560px){.manual-btn .mb-l{display:none}.manual-btn .mb-s{display:inline}}
+
+/* โครงการทั้งหมด / ลิงก์ตรงรายยุทธศาสตร์ */
+.all-head{border-left:6px solid var(--sc,var(--pink))}
+.all-head .ah-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.all-head .ah-n{display:inline-block;background:var(--sc);color:#fff;font-weight:700;border-radius:999px;padding:3px 14px;font-size:.92rem}
+.all-head h2{margin:8px 0 4px}
+.all-head .ah-f{margin-top:8px;line-height:1.9;font-size:.92rem}
+.ah-links{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px}
+.ah-links .lbl{margin-right:4px}
+.ah-links a.chip{text-decoration:none}
